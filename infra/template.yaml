@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Smart Employee Onboarding & Identity Service - shared development foundation.
+  Creates private document storage, DynamoDB tables, Cognito groups, and an HR SNS topic.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+    Description: Environment suffix for this initial solo implementation.
+  EnablePointInTimeRecovery:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable DynamoDB point-in-time recovery after reviewing its cost.
+
+Conditions:
+  UsePointInTimeRecovery: !Equals [!Ref EnablePointInTimeRecovery, 'true']
+
+Resources:
+  EmployeesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-employees'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  OnboardingStagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-onboarding-stages'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: stage
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+        - AttributeName: stage
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  DocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-documents'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: doc_type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+        - AttributeName: doc_type
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  EquipmentTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-equipment'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: asset_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: asset_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'hrms-${Environment}-documents-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentDocumentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  DocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt DocumentsBucket.Arn
+              - !Sub '${DocumentsBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  HrNotificationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'hrms-${Environment}-hr-notifications'
+      Tags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'hrms-${Environment}-users'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      MfaConfiguration: OPTIONAL
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UserPoolTags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  HrAdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: HRAdmin
+      Description: HR administrators allowed to manage onboarding records.
+      UserPoolId: !Ref UserPool
+
+  EmployeeGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: Employee
+      Description: Employees allowed to access their own onboarding records.
+      UserPoolId: !Ref UserPool
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub 'hrms-${Environment}-web-client'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 15
+      IdTokenValidity: 15
+      RefreshTokenValidity: 7
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+Outputs:
+  EmployeesTableName:
+    Description: DynamoDB employee records table.
+    Value: !Ref EmployeesTable
+  OnboardingStagesTableName:
+    Description: DynamoDB onboarding stage table.
+    Value: !Ref OnboardingStagesTable
+  DocumentsTableName:
+    Description: DynamoDB document metadata table.
+    Value: !Ref DocumentsTable
+  EquipmentTableName:
+    Description: DynamoDB equipment inventory table.
+    Value: !Ref EquipmentTable
+  DocumentsBucketName:
+    Description: Private S3 bucket for employee documents.
+    Value: !Ref DocumentsBucket
+  HrNotificationsTopicArn:
+    Description: SNS topic for HR notifications.
+    Value: !Ref HrNotificationsTopic
+  UserPoolId:
+    Description: Cognito user pool ID.
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Public web client ID; it contains no client secret.
+    Value: !Ref UserPoolClient
