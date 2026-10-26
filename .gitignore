@@ -1,0 +1,23 @@
+# secrets
+.env
+.env.*
+*.pem
+*.key
+credentials*
+secrets*
+# aws / tooling
+.aws-sam/
+.terraform/
+*.tfstate*
+cdk.out/
+# python / node
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+build/
+# os / editor
+.DS_Store
+.vscode/
+.idea/

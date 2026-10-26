@@ -1,0 +1,4 @@
+# Replace @amit-cloudops-ai with the lead's GitHub username before enabling "Require review from Code Owners".
+*               @amit-cloudops-ai
+/docs/          @amit-cloudops-ai
+/infra/         @amit-cloudops-ai
