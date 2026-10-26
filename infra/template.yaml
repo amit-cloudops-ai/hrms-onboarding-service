@@ -48,8 +48,10 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   OnboardingStagesTable:
     Type: AWS::DynamoDB::Table
@@ -71,8 +73,10 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   DocumentsTable:
     Type: AWS::DynamoDB::Table
@@ -94,8 +98,10 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   EquipmentTable:
     Type: AWS::DynamoDB::Table
@@ -113,8 +119,10 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   DocumentsBucket:
     Type: AWS::S3::Bucket
@@ -141,8 +149,10 @@ Resources:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   DocumentsBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -167,8 +177,10 @@ Resources:
     Properties:
       TopicName: !Sub 'hrms-${Environment}-hr-notifications'
       Tags:
-        Project: hrms-onboarding-service
-        Environment: !Ref Environment
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
 
   UserPool:
     Type: AWS::Cognito::UserPool
