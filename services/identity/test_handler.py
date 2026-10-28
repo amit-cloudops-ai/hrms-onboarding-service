@@ -55,6 +55,19 @@ class ValidateEmployeePayloadTests(unittest.TestCase):
         with self.assertRaises(InvalidEmployeeInput):
             validate_employee_payload(payload)
 
+    def test_rejects_malformed_email_addresses(self):
+        for email in (
+            "person@@example.com",
+            "person@",
+            "@example.com",
+            "person@example",
+            "person@-example.com",
+            "person@example-.com",
+        ):
+            with self.subTest(email=email):
+                with self.assertRaises(InvalidEmployeeInput):
+                    validate_employee_payload(dict(self.valid, email=email))
+
     def test_rejects_non_string_optional_field(self):
         with self.assertRaises(InvalidEmployeeInput):
             validate_employee_payload(dict(self.valid, manager_id=123))
@@ -115,6 +128,25 @@ class CreateEmployeeTests(unittest.TestCase):
             Key={"employee_id": "employee-test-123"},
             ConditionExpression="attribute_exists(employee_id)",
         )
+
+    def test_logs_cleanup_failure_without_hiding_identity_error(self):
+        self.cognito.admin_create_user.side_effect = client_error()
+        self.table.delete_item.side_effect = client_error()
+
+        with self.assertLogs("handler", level="ERROR") as captured:
+            with self.assertRaisesRegex(
+                IdentityError,
+                "Could not create the employee's Cognito identity",
+            ):
+                create_employee(
+                    self.payload,
+                    table=self.table,
+                    cognito=self.cognito,
+                    user_pool_id="us-east-1_testpool",
+                    employee_id="employee-test-123",
+                )
+
+        self.assertIn("cleanup failed", captured.output[0].lower())
 
     def test_returns_identity_error_when_pool_id_missing(self):
         with self.assertRaises(IdentityError):

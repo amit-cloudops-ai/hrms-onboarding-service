@@ -6,7 +6,9 @@ payload, writes the canonical employee record, and creates the Cognito user.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -15,8 +17,59 @@ import boto3
 from botocore.exceptions import ClientError
 
 
-REQUIRED_FIELDS = ("full_name", "email", "department", "role", "joining_date", "employment_type")
+REQUIRED_FIELDS = (
+    "full_name",
+    "email",
+    "department",
+    "role",
+    "joining_date",
+    "employment_type",
+)
 OPTIONAL_FIELDS = ("manager_id",)
+
+def _is_valid_email(email: str) -> bool:
+    """Validate a conventional email address without fragile regex escaping."""
+    if not email or len(email) > 254 or email.count("@") != 1:
+        return False
+
+    local, domain = email.rsplit("@", 1)
+
+    if (
+        not local
+        or len(local) > 64
+        or local.startswith(".")
+        or local.endswith(".")
+        or ".." in local
+    ):
+        return False
+
+    allowed_local = set(
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789.!#$%&'*+/=?^_`{|}~-"
+    )
+    if any(char not in allowed_local for char in local):
+        return False
+
+    labels = domain.split(".")
+    if len(labels) < 2:
+        return False
+
+    for label in labels:
+        if (
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+        ):
+            return False
+        if any(
+            not (char.isascii() and (char.isalnum() or char == "-"))
+            for char in label
+        ):
+            return False
+
+    return True
 
 
 class IdentityError(Exception):
@@ -36,22 +89,35 @@ def validate_employee_payload(payload: Any) -> dict[str, str]:
     if not isinstance(payload, dict):
         raise InvalidEmployeeInput("Request body must be a JSON object.")
 
-    missing = [field for field in REQUIRED_FIELDS if not isinstance(payload.get(field), str) or not payload[field].strip()]
+    missing = [
+        field
+        for field in REQUIRED_FIELDS
+        if not isinstance(payload.get(field), str) or not payload[field].strip()
+    ]
     if missing:
-        raise InvalidEmployeeInput(f"Missing or empty required fields: {', '.join(missing)}")
+        raise InvalidEmployeeInput(
+            f"Missing or empty required fields: {', '.join(missing)}"
+        )
 
     email = payload["email"].strip().lower()
-    if "@" not in email or email.startswith("@") or email.endswith("@"):
+    if len(email) > 254 or not _is_valid_email(email):
         raise InvalidEmployeeInput("email must be a valid email address.")
 
-    normalized = {field: payload[field].strip() for field in REQUIRED_FIELDS}
+    normalized = {
+        field: payload[field].strip()
+        for field in REQUIRED_FIELDS
+    }
     normalized["email"] = email
+
     for field in OPTIONAL_FIELDS:
         value = payload.get(field)
         if value is not None and not isinstance(value, str):
-            raise InvalidEmployeeInput(f"{field} must be a string when provided.")
+            raise InvalidEmployeeInput(
+                f"{field} must be a string when provided."
+            )
         if isinstance(value, str) and value.strip():
             normalized[field] = value.strip()
+
     return normalized
 
 
@@ -73,6 +139,7 @@ def create_employee(
     employee = validate_employee_payload(payload)
     table_name = os.environ.get("EMPLOYEES_TABLE", "hrms-dev-employees")
     pool_id = user_pool_id or os.environ.get("COGNITO_USER_POOL_ID")
+
     if table is None:
         table = boto3.resource("dynamodb").Table(table_name)
     if cognito is None:
@@ -116,10 +183,13 @@ def create_employee(
                 ConditionExpression="attribute_exists(employee_id)",
             )
         except ClientError:
-            # Preserve the original Cognito failure; operational logs can identify
-            # any cleanup issue without leaking credentials or personal data.
-            pass
-        raise IdentityError("Could not create the employee's Cognito identity.") from exc
+            # Log a fixed message without exposing employee data or AWS error details.
+            logging.getLogger(__name__).error(
+                "Employee record cleanup failed after Cognito user creation failure."
+            )
+        raise IdentityError(
+            "Could not create the employee's Cognito identity."
+        ) from exc
 
     return {
         "employee_id": new_id,
@@ -136,13 +206,28 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     try:
         payload = event.get("employee") if isinstance(event, dict) else None
+
         if payload is None and isinstance(event, dict):
             payload = event.get("body")
             if isinstance(payload, str):
                 payload = json.loads(payload)
+
         result = create_employee(payload)
         return {"ok": True, "employee": result}
+
     except (InvalidEmployeeInput, json.JSONDecodeError) as exc:
-        return {"ok": False, "error": {"code": "INVALID_REQUEST", "message": str(exc)}}
+        return {
+            "ok": False,
+            "error": {
+                "code": "INVALID_REQUEST",
+                "message": str(exc),
+            },
+        }
     except IdentityError as exc:
-        return {"ok": False, "error": {"code": "IDENTITY_CREATION_FAILED", "message": str(exc)}}
+        return {
+            "ok": False,
+            "error": {
+                "code": "IDENTITY_CREATION_FAILED",
+                "message": str(exc),
+            },
+        }
