@@ -17,13 +17,12 @@ The Lambda expects API Gateway JWT authorization to be configured for every rout
 - `POST /employees/{employee_id}/policies/sign` — matching employee by Cognito subject; delegates to `STAGES_FUNCTION_NAME` with action `sign_policy`.
 - `POST /employees/{employee_id}/stages/{stage}/complete` — HR admin; submits the stored callback token server-side and never returns it.
 
-The document and stage adapters are external integration boundaries, not imported Python packages in this branch. If their function names are unset, the API returns `503 SERVICE_NOT_CONFIGURED`; if invocation fails, it returns a sanitized dependency error. The adapter invocation contract is:
+WP3 and WP4 are implemented as separately deployed Lambda packages. The API passes the authenticated Cognito `sub` to the adapter and only invokes them through its IAM role. Each adapter validates the requested employee against the canonical employee record and returns a standard API Gateway response envelope. Missing function names return `503 SERVICE_NOT_CONFIGURED`; downstream failures return sanitized errors.
 
-- Documents adapter: `{"action":"list_documents","employee_id":"...","caller":{"email":"...","is_admin":true|false}}`
-- Upload adapter: `{"action":"create_upload_url","employee_id":"...","caller":{"email":"...","is_admin":false},"document":{...}}`
-- Stage/policy adapter: `{"action":"sign_policy","employee_id":"...","caller":{"email":"..."},"policy":{...}}`
-
-The adapter must independently validate all payload fields and enforce its own data constraints. It must never trust a caller identity supplied in the payload as authentication; the API has already authorized the caller, but the adapter should only accept invocation from the API role. Until the adapters are configured and their contract tests pass, those operations are intentionally unavailable rather than returning fake success.
+- Documents adapter actions: `list_documents`, `create_upload_url`.
+- Stage adapter actions: `sign_policy`, `complete_stage` for the manager-intro route.
+- HR admins can complete the manager-intro stage. Other manual stage callbacks are submitted through WP2's server-side callback helper.
+- Deploy WP4 first, then WP3 and WP2, and finally WP5. See `docs/solo-integration-runbook.md` for parameters and acceptance tests.
 
 ## Required environment variables
 
