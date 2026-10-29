@@ -19,6 +19,18 @@
 - The document template creates a private, encrypted, versioned S3 bucket and uses an exact upload-origin parameter for CORS.
 - The workflow uses Step Functions Standard callbacks and SNS topics. IT provisioning is intended to run in simulation mode for the first test.
 
+## Automated read-only inventory
+
+Run the repository script from a terminal that has the AWS CLI configured for the intended account:
+
+```bash
+bash scripts/aws_predeploy_audit.sh
+```
+
+It reports the current identity, region, CloudFormation stack metadata, expected table key/index metadata, Cognito pool names/IDs, matching Lambda/state machine/SNS names, HRMS-like bucket security metadata (not objects), and a recent Cost Explorer view when permission is available. To inspect one selected Cognito pool's settings, groups, and app-client metadata without printing secrets, set `COGNITO_USER_POOL_ID` before running it. Permission-denied or missing-resource output needs human interpretation; it is not evidence that a resource is absent.
+
+**The script has not been run against the target AWS account from this session.** The repository-side static review cannot establish the real account ID, resource existence, index schemas, live settings, or actual costs.
+
 ## Required live-account inspection
 
 Run only after explicitly selecting the intended AWS profile. These are read-only checks:
@@ -39,15 +51,15 @@ For each existing DynamoDB table, use `describe-table` and verify exact key sche
 
 ## Static integration findings that must be closed before deployment
 
-1. **Cognito sign-in is not wired into either frontend.** The API requires a JWT in the `Authorization: Bearer` header. Both frontend request helpers currently call the protected API without adding a Cognito token.
-2. **Employee portal identity resolution is not production-ready.** It uses a configured employee ID instead of resolving the authenticated user's own employee record. Do not expose a shared portal configuration as a multi-employee self-service app until this is corrected.
-3. **The HR create-employee request was corrected to the backend schema** (`full_name`, `joining_date`, `employment_type`). Verify the latest frontend build and live response mapping after this change.
-4. **Frontend behavior must handle API error envelopes and refresh stage/document state.** A successful upload URL response is followed by a direct S3 PUT; check the PUT response and then poll/refresh document status until it is verified or rejected.
-5. **S3 CORS origin must exactly match the eventual portal origin.** No production URL has been selected or verified.
-6. **Workflow callback chain needs real integration testing.** Verify stage token storage/clearing, timeout/reminder behavior, document validation retries, all three policy acceptances, manager-intro admin completion, and the final workflow execution status.
-7. **DynamoDB table existence/schema and the documented `status-index` are unverified.** The current SAM templates reference existing tables rather than creating them. Do not assume the data model document matches the actual account.
-8. **Template names and permissions require a change-set review.** In particular, review IAM wildcards used for Step Functions callback submission, Lambda invocation targets, S3 object access, and any replacement/deletion of existing resources.
-9. **Cost cannot be responsibly estimated from templates alone.** Inspect actual usage and current AWS pricing for Lambda, Step Functions, S3 versions/requests, DynamoDB capacity, CloudWatch logs, and SNS. Set a budget alert before a test deployment.
+1. **Cognito PKCE and JWT wiring is now implemented in both frontends but not live-verified.** Each app uses a public Cognito app-client ID, authorization-code grant with PKCE, session-scoped token storage/refresh, and bearer ID tokens. Confirm the real hosted-login domain, token endpoint CORS, callback/sign-out allowlists, supported scopes, and that the app client has no secret.
+2. **Current employee lookup is implemented as `GET /employees/me`.** It maps the verified JWT `sub` to one employee record and refuses missing or ambiguous links. The route currently performs a paginated DynamoDB scan on `cognito_sub`; verify `dynamodb:Scan` permission. Before meaningful scale, review adding a dedicated `cognito_sub` GSI and migrating the endpoint to `Query`.
+3. **HR create-employee request matches the identity service schema:** `full_name`, `email`, `role`, `department`, `joining_date`, and `employment_type`. Confirm the deployed API's `201 { employee: ... }` response and subsequent list refresh.
+4. **Upload completion is asynchronous.** The browser checks the presigned PUT status and refreshes document status, but S3-trigger validation may finish after that first refresh. A live acceptance test must verify that the UI visibly converges to `verified` or `rejected`, including retry after a rejected file or an expired link.
+5. **CORS origins are parameterized in the API template.** Defaults are localhost portal `:5173` and HR dashboard `:5174`; override both for deployed origins. The document bucket's `UploadAllowedOrigin` must exactly match the deployed portal origin. No production URLs have been selected or verified.
+6. **Journey regression coverage has been added.** The new offline integration tests exercise the four-stage ASL order, 24-hour timeout/reminder loop, document-stage gate, invalid upload rejection/notification, all three policy acceptances, manager-admin completion, and expired callback failure. They use mocks; they do not establish live Step Functions, S3 events, Cognito, or SNS behavior.
+7. **Actual DynamoDB table existence/schema and the documented `status-index` remain unverified.** Templates reference existing tables. Verify exact keys, indexes, billing mode, encryption, deletion protection/PITR as applicable, and IAM access before deploying.
+8. **Fixed resource names and IAM permissions need a change-set review.** Confirm `hrms-dev-*` Lambda/state-machine/SNS names will not conflict. Review callback wildcard permissions, S3 object scope, adapter Lambda invocation targets, and any resource replacement.
+9. **Real AWS costs are unknown until the target account is inspected.** Inspect recent Cost Explorer figures and budget configuration; include Lambda, API Gateway, Step Functions Standard, DynamoDB, S3 requests/storage/versions, CloudWatch Logs, and SNS. Cost Explorer can lag and does not predict future usage.
 
 ## Deployment gate
 
