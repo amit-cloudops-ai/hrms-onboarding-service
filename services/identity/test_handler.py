@@ -73,7 +73,7 @@ class ValidateEmployeePayloadTests(unittest.TestCase):
             validate_employee_payload(dict(self.valid, joining_date="2026-02-30"))
 
     def test_rejects_non_iso_joining_date(self):
-        with self.assertRaisesRegex(InvalidEmployeeInput, "ISO format"):
+        with self.assertRaisesRegex(InvalidEmployeeInput, "valid ISO date"):
             validate_employee_payload(dict(self.valid, joining_date="16/11/2026"))
 
     def test_rejects_non_string_optional_field(self):
