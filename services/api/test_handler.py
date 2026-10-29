@@ -89,7 +89,7 @@ class ApiResponseTests(unittest.TestCase):
             body={"policy_id": "acceptable-use"},
             path_params={"employee_id": "emp-other"},
         )
-        with patch.object(handler, "_employees_table", return_value=employee_table), \\
+        with patch.object(handler, "_employees_table", return_value=employee_table), \
              patch.object(handler, "_invoke_service") as invoke:
             upload_response = handler.lambda_handler(upload, None)
             sign_response = handler.lambda_handler(sign, None)
@@ -108,7 +108,7 @@ class ApiResponseTests(unittest.TestCase):
         stages = Mock()
         stages.query.return_value = {"Items": []}
         claims = {"email": "hr@example.com", "cognito:groups": ["hr-admins"]}
-        with patch.object(handler, "_employees_table", return_value=employees), \\
+        with patch.object(handler, "_employees_table", return_value=employees), \
              patch.object(handler, "_stages_table", return_value=stages):
             response = handler.lambda_handler(event("GET", "/employees", claims=claims), None)
         self.assertEqual(response["statusCode"], 200)
