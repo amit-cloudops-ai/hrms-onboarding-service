@@ -30,6 +30,10 @@ jobs:
         run: sam validate --lint --template-file services/api/template.yaml
       - name: Validate workflow SAM template
         run: sam validate --lint --template-file services/workflow/template.yaml
+      - name: Validate documents SAM template
+        run: sam validate --lint --template-file services/documents/template.yaml
+      - name: Validate stages SAM template
+        run: sam validate --lint --template-file services/stages/template.yaml
       - name: Identity tests
         working-directory: services/identity
         run: python -m unittest -v
@@ -42,3 +46,9 @@ jobs:
       - name: Workflow callback tests
         working-directory: services/workflow
         run: python -m unittest test_callbacks -v
+      - name: Documents service tests
+        working-directory: .
+        run: python -m unittest services.documents.test_handler -v
+      - name: Stage service tests
+        working-directory: .
+        run: python -m unittest services.stages.test_handler -v
