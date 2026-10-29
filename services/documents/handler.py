@@ -109,16 +109,29 @@ def create_upload_url(event: dict[str, Any], *, documents_table: Any | None = No
     key = _key(employee_id, doc_type, content_type)
     table = _table("DOCUMENTS_TABLE", documents_table)
     timestamp = now or _now()
+    item = {"employee_id": employee_id, "doc_type": doc_type, "s3_key": key, "status": "missing",
+            "file_size": file_size, "content_type": content_type, "requested_at": timestamp}
     try:
         table.put_item(
-            Item={"employee_id": employee_id, "doc_type": doc_type, "s3_key": key, "status": "missing",
-                  "file_size": file_size, "content_type": content_type, "requested_at": timestamp},
+            Item=item,
             ConditionExpression="attribute_not_exists(employee_id) AND attribute_not_exists(doc_type)",
         )
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-            return _response(409, {"error": {"code": "UPLOAD_ALREADY_REQUESTED", "message": "A document upload is already registered for this type"}})
-        raise
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        existing = table.get_item(Key={"employee_id": employee_id, "doc_type": doc_type}, ConsistentRead=True).get("Item")
+        if not isinstance(existing, dict) or existing.get("status") not in ("missing", "rejected"):
+            return _response(409, {"error": {"code": "DOCUMENT_ALREADY_VERIFIED", "message": "This document type is already uploaded or verified"}})
+        # Permit retry after an expired upload URL or rejected file. A fresh
+        # random key prevents a stale URL from overwriting the replacement.
+        table.update_item(
+            Key={"employee_id": employee_id, "doc_type": doc_type},
+            UpdateExpression="SET s3_key = :key, #status = :status, file_size = :size, content_type = :type, requested_at = :now REMOVE validated_at",
+            ConditionExpression="#status IN (:missing, :rejected)",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":key": key, ":status": "missing", ":size": file_size, ":type": content_type,
+                                       ":now": timestamp, ":missing": "missing", ":rejected": "rejected"},
+        )
     try:
         url = _s3(s3).generate_presigned_url(
             "put_object",
