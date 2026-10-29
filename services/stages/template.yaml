@@ -29,7 +29,6 @@ Parameters:
     Description: Comma-separated policy IDs that must be accepted before policy_signoff completes.
 
 Conditions:
-  UseRealProvisioning: !Equals [!Ref SimulationMode, 'false']
   HasProvisioningFunction: !Not [!Equals [!Ref ProvisioningFunctionName, '']]
 
 Resources:
