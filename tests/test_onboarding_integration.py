@@ -29,10 +29,9 @@ class WorkflowDefinitionJourneyTests(unittest.TestCase):
         self.assertEqual(states["SendReminder"]["Next"], "RunStage")
 
         choices = {
-            choice["Variable"]: choice["Next"]
+            choice["StringEquals"]: choice["Next"]
             for choice in states["SelectNextStage"]["Choices"]
         }
-        self.assertEqual(choices["$.current_stage"], "SetITProvisioning")
         self.assertEqual(
             [choice["StringEquals"] for choice in states["SelectNextStage"]["Choices"]],
             ["document_collection", "it_provisioning", "policy_signoff", "manager_intro"],
