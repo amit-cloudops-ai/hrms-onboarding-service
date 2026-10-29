@@ -126,6 +126,12 @@ Resources:
             ApiId: !Ref OnboardingApi
             Path: /employees
             Method: POST
+        GetCurrentEmployee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/me
+            Method: GET
         ListEmployees:
           Type: HttpApi
           Properties:
