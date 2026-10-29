@@ -12,6 +12,9 @@ Parameters:
   DocumentsTableName:
     Type: String
     Default: hrms-dev-documents
+  EquipmentTableName:
+    Type: String
+    Default: hrms-dev-equipment
   SimulationMode:
     Type: String
     Default: 'true'
@@ -51,6 +54,7 @@ Resources:
           EMPLOYEES_TABLE: !Ref EmployeesTableName
           STAGES_TABLE: !Ref StagesTableName
           DOCUMENTS_TABLE: !Ref DocumentsTableName
+          EQUIPMENT_TABLE: !Ref EquipmentTableName
           SIMULATION_MODE: !Ref SimulationMode
           PROVISIONING_FUNCTION_NAME: !Ref ProvisioningFunctionName
           REQUIRED_POLICIES: !Ref RequiredPolicies
@@ -73,6 +77,12 @@ Resources:
               Action:
                 - dynamodb:Query
               Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DocumentsTableName}'
+            - Sid: RecordSimulatedEquipmentAssignments
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EquipmentTableName}'
             - Sid: ResumeWaitingWorkflowTasks
               Effect: Allow
               Action:
