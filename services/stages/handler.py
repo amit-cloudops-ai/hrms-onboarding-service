@@ -182,6 +182,14 @@ def sign_policy(event: dict[str, Any], *, employees_table: Any | None = None,
         return {"statusCode": 409, "headers": {"content-type": "application/json"},
                 "body": json.dumps({"error": {"code": "STAGE_NOT_READY", "message": "Policy sign-off is not currently open"}})}
     timestamp = now or _now()
+    # DynamoDB cannot assign a nested map key until the parent map exists.
+    table.update_item(
+        Key={"employee_id": employee_id, "stage": "policy_signoff"},
+        UpdateExpression="SET policy_acceptances = if_not_exists(policy_acceptances, :empty)",
+        ConditionExpression="#status = :in_progress AND attribute_exists(task_token)",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":empty": {}, ":in_progress": "in_progress"},
+    )
     updated = table.update_item(
         Key={"employee_id": employee_id, "stage": "policy_signoff"},
         UpdateExpression="SET policy_acceptances.#policy = :acceptance",
