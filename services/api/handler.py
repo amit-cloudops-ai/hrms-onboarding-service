@@ -318,7 +318,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(403, "FORBIDDEN", "You cannot access these documents.")
         return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
             "action": "list_documents", "employee_id": employee_id,
-            "caller": {"email": claims.get("email"), "is_admin": admin},
+            "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": admin},
         })
 
     if method == "POST" and isinstance(employee_id, str) and path == f"/employees/{employee_id}/documents/upload-url":
@@ -333,7 +333,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(400, "INVALID_REQUEST", str(exc))
         return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
             "action": "create_upload_url", "employee_id": employee_id,
-            "caller": {"email": claims.get("email"), "is_admin": False},
+            "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": False},
             "document": payload,
         })
 
@@ -349,7 +349,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(400, "INVALID_REQUEST", str(exc))
         return _invoke_service(os.environ.get("STAGES_FUNCTION_NAME", ""), {
             "action": "sign_policy", "employee_id": employee_id,
-            "caller": {"email": claims.get("email")}, "policy": payload,
+            "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": False}, "policy": payload,
         })
 
     if method == "POST" and isinstance(employee_id, str) and path.startswith(f"/employees/{employee_id}/stages/") and path.endswith("/complete"):
@@ -361,6 +361,14 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
         if _get_employee(employee_id, table=employees_table) is None:
             return _error(404, "NOT_FOUND", "Employee was not found.")
         try:
+            if stage == "manager_intro":
+                return _invoke_service(os.environ.get("STAGES_FUNCTION_NAME", ""), {
+                    "action": "complete_stage",
+                    "employee_id": employee_id,
+                    "stage": stage,
+                    "source": "hr_admin",
+                    "caller": {"sub": claims.get("sub"), "email": claims.get("email"), "is_admin": True},
+                })
             from services.workflow.callbacks import CallbackConflict, resume_stage
             result = resume_stage(
                 employee_id, stage, authorized=True,
