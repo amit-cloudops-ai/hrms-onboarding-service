@@ -88,6 +88,47 @@ run_readonly aws ce get-cost-and-usage --time-period "Start=$START_DATE,End=$END
   --group-by Type=DIMENSION,Key=SERVICE \
   --query 'ResultsByTime[].{Date:TimePeriod.Start,Costs:Groups[].{Service:Keys[0],Amount:Metrics.UnblendedCost.Amount,Unit:Metrics.UnblendedCost.Unit}}' --output json
 
+section "CloudFormation resource inventory for expected solo stacks"
+for stack in hrms-dev-stages hrms-dev-documents hrms-dev-workflow hrms-dev-api; do
+  echo "--- $stack ---"
+  run_readonly aws cloudformation describe-stacks --region "$REGION" --stack-name "$stack" \
+    --query 'Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue,Description:Description}' --output table
+  run_readonly aws cloudformation list-stack-resources --region "$REGION" --stack-name "$stack" \
+    --query 'StackResourceSummaries[].{LogicalId:LogicalResourceId,Type:ResourceType,PhysicalId:PhysicalResourceId,Status:ResourceStatus}' --output table
+done
+
+section "Cognito OAuth app-client configuration (only when COGNITO_USER_POOL_ID is set)"
+if [ -n "$COGNITO_USER_POOL_ID" ]; then
+  CLIENT_IDS="$(aws cognito-idp list-user-pool-clients --region "$REGION" --user-pool-id "$COGNITO_USER_POOL_ID" --max-results 60 --query 'UserPoolClients[].ClientId' --output text 2>/dev/null || true)"
+  for client_id in $CLIENT_IDS; do
+    [ -z "$client_id" ] && continue
+    echo "--- $client_id (ClientSecret is intentionally not requested) ---"
+    run_readonly aws cognito-idp describe-user-pool-client --region "$REGION" --user-pool-id "$COGNITO_USER_POOL_ID" --client-id "$client_id" \
+      --query 'UserPoolClient.{Name:ClientName,Id:ClientId,HasSecret:GenerateSecret,AuthFlows:ExplicitAuthFlows,OAuthEnabled:AllowedOAuthFlowsUserPoolClient,OAuthFlows:AllowedOAuthFlows,Scopes:AllowedOAuthScopes,CallbackURLs:CallbackURLs,LogoutURLs:LogoutURLs,Providers:SupportedIdentityProviders,RefreshTokenValidity:RefreshTokenValidity,AccessTokenValidity:AccessTokenValidity,IdTokenValidity:IdTokenValidity}' --output json
+  done
+fi
+
+section "IAM policies for HRMS Lambda execution roles"
+ROLE_ARNS="$(aws lambda list-functions --region "$REGION" --query "Functions[?contains(FunctionName, 'hrms-dev-')].Role" --output text 2>/dev/null || true)"
+for role_arn in $ROLE_ARNS; do
+  [ -z "$role_arn" ] && continue
+  role_name="$(basename "$role_arn")"
+  echo "--- $role_name ---"
+  run_readonly aws iam list-attached-role-policies --role-name "$role_name" \
+    --query 'AttachedPolicies[].{Name:PolicyName,Arn:PolicyArn}' --output table
+  run_readonly aws iam list-role-policies --role-name "$role_name" --query 'PolicyNames' --output json
+  INLINE_NAMES="$(aws iam list-role-policies --role-name "$role_name" --query 'PolicyNames[]' --output text 2>/dev/null || true)"
+  for policy_name in $INLINE_NAMES; do
+    [ -z "$policy_name" ] && continue
+    echo "Inline policy: $role_name / $policy_name"
+    run_readonly aws iam get-role-policy --role-name "$role_name" --policy-name "$policy_name" --query 'PolicyDocument' --output json
+  done
+done
+
+section "CloudWatch log retention for expected Lambda functions"
+run_readonly aws logs describe-log-groups --region "$REGION" --log-group-name-prefix "/aws/lambda/hrms-dev-" \
+  --query 'logGroups[].{Name:logGroupName,RetentionDays:retentionInDays,StoredBytes:storedBytes}' --output table
+
 section "Manual verification still required"
 cat <<'NOTE'
 1. Confirm the displayed account ID and region are the intended test target.
