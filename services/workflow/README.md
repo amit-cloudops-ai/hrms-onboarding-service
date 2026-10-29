@@ -103,3 +103,25 @@ by the local test command.
   non-production integration test before a live release.
 - Reminder delivery is at-least-once; operational monitoring must account for
   duplicate notifications.
+
+## WP4 dispatch and stage progression
+
+The workflow Lambda persists the Step Functions task token and `in_progress`
+state, then synchronously invokes `STAGES_FUNCTION_NAME` with
+`action=start_stage`, `employee_id`, `stage`, and `taskToken`. If the
+adapter is missing or rejects the event, the callback token is cleared and the
+state-machine task retries rather than leaving a token that can never resume.
+
+- `it_provisioning` is auto-completed by WP4 in simulated mode; real mode uses
+  the configured provisioning adapter and requires an explicit success response.
+- `document_collection` waits for WP3 to verify all required files.
+- `policy_signoff` waits until WP4 has recorded every required policy acceptance.
+- `manager_intro` waits for HR to complete the introduction stage.
+
+WP4 submits `SendTaskSuccess`; this state machine then runs
+`mark_stage_complete`, which changes the stage status to `complete` and
+removes the token. The token is never included in logs or API responses.
+
+Deployment order: deploy WP4 first, then pass its `StagesFunctionName` output
+to the WP2 workflow template and WP5 API template. WP3 also needs the same
+output so it can complete the document-collection stage after validation.
