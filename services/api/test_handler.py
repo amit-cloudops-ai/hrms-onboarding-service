@@ -139,8 +139,8 @@ class ApiResponseTests(unittest.TestCase):
         employees = Mock()
         employees.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
         stages = Mock()
-        with patch.object(handler, "_employees_table", return_value=employees), \\
-             patch.object(handler, "_stages_table", return_value=stages), \\
+        with patch.object(handler, "_employees_table", return_value=employees), \
+             patch.object(handler, "_stages_table", return_value=stages), \
              patch("services.workflow.callbacks.resume_stage", return_value={
                  "ok": True, "employee_id": "emp-1",
                  "stage": "document_collection", "status": "completion_submitted",
