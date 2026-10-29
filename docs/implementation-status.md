@@ -75,6 +75,31 @@ GitHub Actions workflow run **#90** for validation commit `04353204dc8a001f680ba
 
 These are offline/mocked tests. They do not prove live AWS behavior.
 
+
+## WP6 — New-hire portal
+
+Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integration pending verification**
+
+- Adds a premium, responsive employee workspace with a four-stage journey, progress summary, document checklist, policy acknowledgements, equipment/manager status cards, and support dialog.
+- Implements PDF/JPG/PNG document selection with a 5 MB client-side limit and the presigned-upload-URL → S3 PUT flow when configured for live mode.
+- Includes a clearly labelled demo mode that works without AWS resources or credentials.
+- Uses the route contract in `docs/api-contract.md`; browser uploads require matching S3 bucket CORS.
+- **Release limitation:** API Gateway requires Cognito JWTs. Cognito sign-in/session wiring and live response-shape verification still need to be completed before this portal can operate against a protected deployed API.
+
+## WP7 — HR operations dashboard
+
+Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integration pending verification**
+
+- Adds a premium, responsive operations overview with stage completion analytics, cohort metrics, upcoming start dates, search/filter, employee details, CSV export, and a create-new-hire form.
+- The create form maps to `POST /employees`; the list reads `GET /employees` when configured for live mode.
+- Includes a clearly labelled demo workspace; demo-created employees are local UI state and do not create AWS resources.
+- **Release limitation:** Cognito sign-in/session wiring and live API response-shape verification are still required for the protected API. Validate the live flow before treating WP6/WP7 as end-to-end integrated.
+
+## Frontend build verification
+
+- Added `.github/workflows/frontend-build.yml` to install dependencies and run production builds for both Vite apps on changes to `v1-solo`.
+- The workflow has been committed, but a successful run has **not yet been confirmed** in this handoff. Do not describe the frontend builds as passing until GitHub Actions reports success.
+
 ## Release boundary
 
 - No AWS deployment or live integration test has been performed.
