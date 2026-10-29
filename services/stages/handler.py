@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError\nfrom boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
 VALID_STAGES = ("document_collection", "it_provisioning", "policy_signoff", "manager_intro")
@@ -213,7 +213,7 @@ def complete_stage(event: dict[str, Any], *, employees_table: Any | None = None,
     if stage == "document_collection" and source == "document_validation":
         table = _table("DOCUMENTS_TABLE", "hrms-dev-documents", documents_table)
         records = table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("employee_id").eq(employee_id),
+            KeyConditionExpression=Key("employee_id").eq(employee_id),
             ConsistentRead=True,
         ).get("Items", [])
         statuses = {item.get("doc_type"): item.get("status") for item in records}
