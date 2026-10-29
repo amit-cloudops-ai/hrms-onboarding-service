@@ -10,49 +10,50 @@
 
 ## WP1 — Identity
 
-Status: **Implemented; integration pending**
+Status: **Offline implementation and test gates passing; live integration unverified**
 
-- Location: `services/identity/`
-- Last recorded local baseline: 13 unit tests passed.
-- Covers payload validation, email normalization, DynamoDB employee creation,
-  Cognito user creation, and cleanup after Cognito creation failure.
-- Not yet proven end-to-end: workflow initiation, persisted `execution_arn`,
-  duplicate-request behavior, AWS integration, and recovery from ambiguous
-  cross-service failures.
-- Decision: preserve the current implementation and close integration gaps after
-  WP2 and WP5 are connected.
+- Validates and normalizes employee input.
+- Writes the employee record, creates the Cognito identity, and stores Cognito's immutable `sub` on the employee record.
+- Performs compensating cleanup when identity creation or subject linkage fails.
+- WP5 self-service authorization compares the JWT `sub` with the stored `cognito_sub`; email alone does not grant access.
 
 ## WP2 — Workflow
 
-Status: **Initial implementation; local validation pending**
+Status: **Offline implementation and template gates passing; live integration unverified**
 
-- Location: `services/workflow/`
-- Implements the four contract stages in sequence.
-- Callback task timeout: 24 hours, followed by reminder dispatch and a new wait.
-- Persists stage state and task tokens in the existing DynamoDB stage table.
-- Includes a SAM template, unit tests, and a package README.
-- Not yet deployed or validated against live AWS resources.
-- WP5 must implement authorized callback resumption; WP4 stage-specific handlers
-  must be integrated before end-to-end completion.
+- Orchestrates the four contract stages in order.
+- Stores callback tokens server-side and never returns them in responses or reminder messages.
+- Waits up to 24 hours for each callback, sends a reminder on timeout, and starts a new callback wait.
+- Persists stage completion after Step Functions accepts the callback.
+- Stage-specific business handlers are an external integration boundary and are not implemented by this WP2 package.
+
+## WP5 — API
+
+Status: **Offline implementation and template gates passing; live integration unverified**
+
+- Implements the eight routes in `docs/api-contract.md` behind an API Gateway Cognito JWT authorizer.
+- Enforces HR-admin checks and immutable-sub employee self-access checks.
+- Creates employee identity and starts the onboarding execution, persisting its execution ARN privately.
+- Exposes server-side callback completion without exposing task tokens.
+- Document and policy operations fail closed with a 503 response until their adapter functions are configured; they do not report false success.
 
 ## Verification log
 
-### Initial WP1 baseline
+GitHub Actions workflow run **#10** for commit `d72012f3c61b1629ca2727a908b3508b67444c01` completed successfully. The run passed:
 
-- Command: `cd services/identity && python -m unittest -v`
-- Result: 13 tests passed.
-- Note: this is the previously observed baseline, not a claim of current end-to-end readiness.
+- ASL JSON syntax validation.
+- SAM lint validation for `services/api/template.yaml`.
+- SAM lint validation for `services/workflow/template.yaml`.
+- WP1 identity unit tests.
+- WP5 API unit tests.
+- WP2 workflow handler unit tests.
+- WP2 callback helper unit tests.
 
-### WP2 initial implementation
+These are offline/mocked tests. They do not prove live AWS behavior.
 
-- Local tests and SAM/ASL validation: pending.
-- AWS deployment and integration tests: not run.
+## Release boundary
 
-## WP2 callback hardening — 2026-10-29
-
-- Added explicit handling for expired, invalid, or already-consumed Step Functions callback tokens.
-- Callback tokens remain server-side and are not returned in the helper response.
-- Callback submission and persisted stage completion are separate events: the Step Functions state machine performs the DynamoDB completion update after callback acceptance.
-- Authorization must be enforced by the API layer before calling `resume_stage`; the helper's `authorized` argument is not a substitute for authentication.
-- Validation target: WP1 and WP2 unit tests, ASL JSON parsing, SAM template lint validation, and `git diff --check`.
-- AWS deployment and end-to-end integration remain unverified.
+- No AWS deployment or live integration test has been performed.
+- Before a live release, validate the deployed IAM role behavior, existing DynamoDB table schemas and indexes, Cognito JWT claims, Step Functions callback and timeout behavior, and SNS reminder delivery in an explicitly approved non-production environment.
+- Document/policy routes require their separately owned adapter integrations before those routes can serve production traffic.
+- Do not describe the entire HRMS product as end-to-end production-ready until external adapters and live integration tests are complete.
