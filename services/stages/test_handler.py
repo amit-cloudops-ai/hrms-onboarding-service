@@ -20,13 +20,27 @@ class StageStartTests(unittest.TestCase):
     def test_simulated_it_provisioning_resumes_waiting_state_machine(self):
         sfn = Mock()
         with patch.dict(handler.os.environ, {"SIMULATION_MODE": "true"}):
-            result = handler._it_provisioning("emp-1", "private-task-token", sfn=sfn)
+            equipment = Mock()
+            result = handler._it_provisioning("emp-1", "private-task-token", sfn=sfn, equipment_table=equipment)
         self.assertEqual(result["mode"], "simulated")
         self.assertEqual(result["status"], "completion_submitted")
+        self.assertEqual(len(result["assets"]), 2)
+        self.assertEqual(equipment.put_item.call_count, 2)
         sfn.send_task_success.assert_called_once()
         kwargs = sfn.send_task_success.call_args.kwargs
         self.assertEqual(kwargs["taskToken"], "private-task-token")
         self.assertNotIn("private-task-token", kwargs["output"])
+
+    def test_simulated_equipment_records_are_deterministic_and_idempotent(self):
+        equipment = Mock()
+        with patch.dict(handler.os.environ, {"EQUIPMENT_TABLE": "equipment-table"}):
+            first = handler._record_simulated_assets("emp-2", equipment_table=equipment, now="now")
+        self.assertEqual([item["asset_id"] for item in first], [
+            "sim-emp-2-laptop", "sim-emp-2-monitor"
+        ])
+        self.assertEqual(equipment.put_item.call_count, 2)
+        self.assertTrue(all(call.kwargs["Item"]["status"] == "assigned"
+                            for call in equipment.put_item.call_args_list))
 
     def test_real_provisioning_requires_configured_provider(self):
         with patch.dict(handler.os.environ, {"SIMULATION_MODE": "false", "PROVISIONING_FUNCTION_NAME": ""}):
