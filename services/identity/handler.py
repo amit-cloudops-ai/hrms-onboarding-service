@@ -240,11 +240,12 @@ def create_employee(
             )
         raise IdentityError("Could not link the employee to the Cognito identity.") from exc
 
+    # Return the canonical employee fields needed by the API response.
+    # Never return the internal Cognito subject or temporary credentials.
     return {
-        "employee_id": new_id,
-        "email": employee["email"],
-        "status": record["status"],
-        "created_at": created_at,
+        key: value
+        for key, value in record.items()
+        if key not in {"cognito_sub", "execution_arn"}
     }
 
 
