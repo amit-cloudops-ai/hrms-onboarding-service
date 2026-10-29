@@ -6,6 +6,7 @@ Region: us-east-1. All routes sit behind API Gateway with a Cognito authorizer.
 |---|---|---|
 | POST /employees | Register a new hire and start onboarding | HR admin |
 | GET /employees | List all hires with stage status | HR admin |
+| GET /employees/me | Resolve the signed-in employee profile by Cognito subject | That employee |
 | GET /employees/{employee_id} | One employee profile | HR admin, that employee |
 | GET /employees/{employee_id}/progress | Progress of all four stages | HR admin, that employee |
 | POST /employees/{employee_id}/documents/upload-url | One-time upload link for a document type | That employee |
