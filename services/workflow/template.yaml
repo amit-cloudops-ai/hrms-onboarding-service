@@ -7,6 +7,9 @@ Parameters:
     Type: String
     Default: hrms-dev-onboarding-stages
     Description: Existing DynamoDB stage table; this template does not create it.
+  StagesFunctionName:
+    Type: String
+    Description: WP4 stage-handler Lambda name. Deploy WP4 first and pass its output.
 
 Resources:
   WorkflowReminderTopic:
@@ -27,6 +30,7 @@ Resources:
         Variables:
           STAGES_TABLE: !Ref StagesTableName
           REMINDER_TOPIC_ARN: !Ref WorkflowReminderTopic
+          STAGES_FUNCTION_NAME: !Ref StagesFunctionName
       Policies:
         - Statement:
             - Sid: UpdateOnboardingStageRecords
@@ -41,6 +45,11 @@ Resources:
               Action:
                 - sns:Publish
               Resource: !Ref WorkflowReminderTopic
+            - Sid: InvokeStageHandlers
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
 
   OnboardingStateMachine:
     Type: AWS::Serverless::StateMachine
