@@ -203,5 +203,249 @@ class HumanStageJourneyTests(unittest.TestCase):
         self.assertNotIn("expired-token", response["body"])
 
 
+
+
+class MemoryEmployeesTable:
+    def __init__(self):
+        self.items = {}
+
+    def put_item(self, **kwargs):
+        item = dict(kwargs["Item"])
+        self.items[item["employee_id"]] = item
+        return {}
+
+    def get_item(self, **kwargs):
+        item = self.items.get(kwargs["Key"]["employee_id"])
+        return {"Item": dict(item) if item else {}}
+
+    def update_item(self, **kwargs):
+        item = self.items[kwargs["Key"]["employee_id"]]
+        values = kwargs.get("ExpressionAttributeValues", {})
+        if ":sub" in values:
+            item["cognito_sub"] = values[":sub"]
+        return {"Attributes": dict(item)}
+
+    def delete_item(self, **kwargs):
+        self.items.pop(kwargs["Key"]["employee_id"], None)
+        return {}
+
+
+class MemoryDocumentsTable:
+    def __init__(self):
+        self.items = {}
+
+    def put_item(self, **kwargs):
+        item = dict(kwargs["Item"])
+        key = (item["employee_id"], item["doc_type"])
+        if key in self.items:
+            raise AssertionError("Unexpected duplicate document setup in success path")
+        self.items[key] = item
+        return {}
+
+    def get_item(self, **kwargs):
+        key = (kwargs["Key"]["employee_id"], kwargs["Key"]["doc_type"])
+        item = self.items.get(key)
+        return {"Item": dict(item) if item else {}}
+
+    def query(self, **kwargs):
+        return {"Items": [dict(item) for item in self.items.values()]}
+
+    def update_item(self, **kwargs):
+        key = (kwargs["Key"]["employee_id"], kwargs["Key"]["doc_type"])
+        item = self.items[key]
+        values = kwargs.get("ExpressionAttributeValues", {})
+        if ":status" in values:
+            item["status"] = values[":status"]
+        if ":key" in values:
+            item["s3_key"] = values[":key"]
+        if ":size" in values:
+            item["file_size"] = values[":size"]
+        if ":type" in values:
+            item["content_type"] = values[":type"]
+        if ":now" in values:
+            item["validated_at"] = values[":now"]
+        return {"Attributes": dict(item)}
+
+
+class MemoryStagesTable:
+    def __init__(self, employee_id):
+        self.records = {}
+        order = ("document_collection", "it_provisioning", "policy_signoff", "manager_intro")
+        for index, stage in enumerate(order):
+            token = f"journey-token-{stage}"
+            self.records[(employee_id, stage)] = {
+                "employee_id": employee_id,
+                "stage": stage,
+                "status": "in_progress" if index == 0 else "pending",
+                **({"task_token": token} if index == 0 else {}),
+            }
+
+    def get_item(self, **kwargs):
+        item = self.records.get((kwargs["Key"]["employee_id"], kwargs["Key"]["stage"]))
+        return {"Item": dict(item) if item else {}}
+
+    def update_item(self, **kwargs):
+        key = (kwargs["Key"]["employee_id"], kwargs["Key"]["stage"])
+        record = self.records[key]
+        values = kwargs.get("ExpressionAttributeValues", {})
+        names = kwargs.get("ExpressionAttributeNames", {})
+        if ":empty" in values:
+            record.setdefault("policy_acceptances", {})
+        if ":acceptance" in values:
+            policy_id = names["#policy"]
+            record.setdefault("policy_acceptances", {})[policy_id] = values[":acceptance"]
+        return {"Attributes": dict(record)}
+
+
+class MemoryEquipmentTable:
+    def __init__(self):
+        self.items = {}
+
+    def put_item(self, **kwargs):
+        item = dict(kwargs["Item"])
+        self.items[item["asset_id"]] = item
+        return {}
+
+
+class MockCognito:
+    def admin_create_user(self, **kwargs):
+        return {"User": {"Attributes": [{"Name": "sub", "Value": "cognito-sub-journey"}]}}
+
+
+class MockStepFunctions:
+    def __init__(self, stage_table, employee_id):
+        self.stage_table = stage_table
+        self.employee_id = employee_id
+        self.completed = []
+
+    def send_task_success(self, *, taskToken, output):
+        payload = json.loads(output)
+        stage = payload["stage"]
+        record = self.stage_table.records[(self.employee_id, stage)]
+        if record.get("task_token") != taskToken or record.get("status") != "in_progress":
+            raise AssertionError("Callback token does not match the active stage")
+        record["status"] = "complete"
+        record.pop("task_token", None)
+        self.completed.append(stage)
+        order = ("document_collection", "it_provisioning", "policy_signoff", "manager_intro")
+        next_index = order.index(stage) + 1
+        if next_index < len(order):
+            next_stage = order[next_index]
+            next_record = self.stage_table.records[(self.employee_id, next_stage)]
+            next_record["status"] = "in_progress"
+            next_record["task_token"] = f"journey-token-{next_stage}"
+
+
+class FullOnboardingJourneyTests(unittest.TestCase):
+    def test_create_employee_to_day_one_ready_using_real_handlers_and_mocked_aws(self):
+        from services.identity import handler as identity
+
+        employee_id = "emp-journey-001"
+        employees = MemoryEmployeesTable()
+        docs = MemoryDocumentsTable()
+        stage_records = MemoryStagesTable(employee_id)
+        equipment = MemoryEquipmentTable()
+        sfn = MockStepFunctions(stage_records, employee_id)
+        s3 = Mock()
+        s3.generate_presigned_url.return_value = "https://signed.example/presigned"
+        s3.head_object.return_value = {"ContentLength": 1024, "ContentType": "application/pdf"}
+        pdf_body = Mock()
+        pdf_body.read.return_value = b"%PDF-1.7 sample document bytes"
+        s3.get_object.return_value = {"Body": pdf_body}
+        notify_hr = Mock()
+
+        employee = identity.create_employee(
+            {
+                "full_name": "Taylor Morgan",
+                "email": "taylor.morgan@example.com",
+                "department": "Engineering",
+                "role": "Software Engineer",
+                "joining_date": "2026-11-16",
+                "employment_type": "full-time",
+            },
+            table=employees,
+            cognito=MockCognito(),
+            user_pool_id="test-pool",
+            employee_id=employee_id,
+            now="2026-10-29T00:00:00+00:00",
+        )
+        self.assertEqual(employee["employee_id"], employee_id)
+        self.assertEqual(employees.items[employee_id]["cognito_sub"], "cognito-sub-journey")
+
+        def submit_document_stage(employee_key):
+            return stages.complete_stage(
+                {"employee_id": employee_key, "stage": "document_collection", "source": "document_validation"},
+                employees_table=employees, documents_table=docs, stages_table=stage_records, sfn=sfn,
+            )
+
+        with patch.dict(documents.os.environ, {
+            "DOCUMENTS_BUCKET": "private-test-bucket",
+            "UPLOAD_URL_TTL_SECONDS": "300",
+            "STAGES_FUNCTION_NAME": "mock-stage-adapter",
+            "HR_NOTIFICATION_TOPIC_ARN": "arn:aws:sns:us-east-1:123456789012:hrms-test",
+        }), patch.object(documents, "_complete_document_stage", side_effect=submit_document_stage):
+            # Request all three presigned URLs first, just as the employee portal does.
+            for doc_type in documents.DOCUMENT_TYPES:
+                request = {
+                    "employee_id": employee_id,
+                    "caller": {"sub": "cognito-sub-journey", "is_admin": False},
+                    "document": {"document_type": doc_type, "content_type": "application/pdf", "file_size": 1024},
+                }
+                signed = documents.create_upload_url(request, documents_table=docs, employees_table=employees, s3=s3, now="now")
+                self.assertEqual(signed["statusCode"], 201)
+            # Simulate S3 ObjectCreated notifications for each valid PDF. The real validator
+            # checks size, content type, and magic bytes, then invokes document-stage completion.
+            for doc_type in documents.DOCUMENT_TYPES:
+                key = docs.items[(employee_id, doc_type)]["s3_key"]
+                verified = documents.verify_uploaded_object("private-test-bucket", key, documents_table=docs, s3=s3, sns=notify_hr, now="now")
+                self.assertEqual(verified["status"], "verified")
+        self.assertEqual(stage_records.records[(employee_id, "document_collection")]["status"], "complete")
+        self.assertEqual(stage_records.records[(employee_id, "it_provisioning")]["status"], "in_progress")
+
+        token = stage_records.records[(employee_id, "it_provisioning")]["task_token"]
+        with patch.dict(stages.os.environ, {"SIMULATION_MODE": "true"}):
+            it_result = stages._it_provisioning(employee_id, token, sfn=sfn, equipment_table=equipment)
+        self.assertEqual(it_result["status"], "completion_submitted")
+        self.assertEqual(len(equipment.items), 2)
+        self.assertEqual(stage_records.records[(employee_id, "policy_signoff")]["status"], "in_progress")
+
+        # Each policy is saved separately; the workflow advances only on the third required acceptance.
+        policy_results = []
+        for policy_id in ("acceptable-use", "privacy", "security"):
+            response = stages.sign_policy(
+                {
+                    "employee_id": employee_id,
+                    "caller": {"sub": "cognito-sub-journey", "is_admin": False},
+                    "policy": {"policy_id": policy_id, "policy_version": "v1", "accepted": True},
+                },
+                employees_table=employees, stages_table=stage_records, sfn=sfn, now="now",
+            )
+            policy_results.append(json.loads(response["body"])["required_policies_complete"])
+        self.assertEqual(policy_results, [False, False, True])
+        self.assertEqual(stage_records.records[(employee_id, "manager_intro")]["status"], "in_progress")
+
+        manager_result = stages.complete_stage(
+            {
+                "employee_id": employee_id,
+                "stage": "manager_intro",
+                "source": "hr_admin",
+                "caller": {"sub": "hr-admin-sub", "is_admin": True},
+            },
+            employees_table=employees, stages_table=stage_records, sfn=sfn,
+        )
+        self.assertEqual(manager_result["statusCode"], 202)
+        self.assertEqual(
+            sfn.completed,
+            ["document_collection", "it_provisioning", "policy_signoff", "manager_intro"],
+        )
+        self.assertTrue(all(record["status"] == "complete" for record in stage_records.records.values()))
+        self.assertEqual(
+            {item["status"] for item in docs.items.values()},
+            {"verified"},
+        )
+        self.assertTrue(all(item["status"] == "assigned" for item in equipment.items.values()))
+        self.assertNotIn("task_token", json.dumps(stage_records.records))
+
+
 if __name__ == "__main__":
     unittest.main()
