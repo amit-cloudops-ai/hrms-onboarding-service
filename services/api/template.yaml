@@ -23,12 +23,10 @@ Parameters:
     Description: ARN of the separately managed WP2 state machine.
   DocumentsFunctionName:
     Type: String
-    Default: ''
-    Description: Existing WP3 adapter Lambda name; leave empty until WP3 is ready.
+    Description: Required document adapter Lambda name. Supply the deployed adapter when deploying the API.
   StagesFunctionName:
     Type: String
-    Default: ''
-    Description: Existing WP4 adapter Lambda name; leave empty until WP4 is ready.
+    Description: Required policy/stage adapter Lambda name. Supply the deployed adapter when deploying the API.
   HrAdminGroup:
     Type: String
     Default: hr-admins
