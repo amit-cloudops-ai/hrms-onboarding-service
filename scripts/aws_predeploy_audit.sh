@@ -65,6 +65,7 @@ run_readonly aws lambda list-functions --region "$REGION" \
 
 section "API Gateway HTTP APIs and route authorization"
 API_IDS="$(aws apigatewayv2 get-apis --region "$REGION" --query "Items[?ProtocolType=='HTTP'].ApiId" --output text 2>/dev/null || true)"
+[ "$API_IDS" = "None" ] && API_IDS=""
 for api_id in $API_IDS; do
   [ -z "$api_id" ] && continue
   echo "--- HTTP API $api_id ---"
@@ -79,6 +80,7 @@ run_readonly aws stepfunctions list-state-machines --region "$REGION" \
   --query "stateMachines[?starts_with(name, 'hrms-dev-')].{Name:name,Type:type,Arn:stateMachineArn,Created:creationDate}" --output table
 
 STATE_MACHINE_ARNS="$(aws stepfunctions list-state-machines --region "$REGION" --query "stateMachines[?contains(name, 'hrms-dev-')].stateMachineArn" --output text 2>/dev/null || true)"
+[ "$STATE_MACHINE_ARNS" = "None" ] && STATE_MACHINE_ARNS=""
 for state_machine_arn in $STATE_MACHINE_ARNS; do
   [ -z "$state_machine_arn" ] && continue
   echo "--- deployed state machine ---"
@@ -89,6 +91,7 @@ done
 section "HRMS S3 bucket security metadata (no objects/versions listed)"
 run_readonly aws s3api list-buckets --query "Buckets[?contains(Name, 'hrms') || contains(Name, 'documents')].{Name:Name,Created:CreationDate}" --output table
 BUCKETS="$(aws s3api list-buckets --query "Buckets[?contains(Name, 'hrms') || contains(Name, 'documents')].Name" --output text 2>/dev/null || true)"
+[ "$BUCKETS" = "None" ] && BUCKETS=""
 for bucket in $BUCKETS; do
   [ -z "$bucket" ] && continue
   echo "--- $bucket ---"
@@ -103,6 +106,7 @@ run_readonly aws sns list-topics --region "$REGION" --query "Topics[?contains(To
 
 section "HRMS SNS subscription status (endpoint values omitted)"
 TOPIC_ARNS="$(aws sns list-topics --region "$REGION" --query "Topics[?contains(TopicArn, ':hrms-dev-')].TopicArn" --output text 2>/dev/null || true)"
+[ "$TOPIC_ARNS" = "None" ] && TOPIC_ARNS=""
 for topic_arn in $TOPIC_ARNS; do
   [ -z "$topic_arn" ] && continue
   echo "--- $topic_arn ---"
@@ -126,7 +130,7 @@ for stack in hrms-dev-stages hrms-dev-documents hrms-dev-workflow hrms-dev-api; 
 done
 
 section "Cognito OAuth app-client configuration (only when COGNITO_USER_POOL_ID is set)"
-if [ -n "$COGNITO_USER_POOL_ID" ]; then
+if [ -n "${COGNITO_USER_POOL_ID:-}" ]; then
   CLIENT_IDS="$(aws cognito-idp list-user-pool-clients --region "$REGION" --user-pool-id "$COGNITO_USER_POOL_ID" --max-results 60 --query 'UserPoolClients[].ClientId' --output text 2>/dev/null || true)"
   for client_id in $CLIENT_IDS; do
     [ -z "$client_id" ] && continue
@@ -138,6 +142,7 @@ fi
 
 section "IAM policies for HRMS Lambda execution roles"
 ROLE_ARNS="$(aws lambda list-functions --region "$REGION" --query "Functions[?contains(FunctionName, 'hrms-dev-')].Role" --output text 2>/dev/null || true)"
+[ "$ROLE_ARNS" = "None" ] && ROLE_ARNS=""
 for role_arn in $ROLE_ARNS; do
   [ -z "$role_arn" ] && continue
   role_name="$(basename "$role_arn")"
