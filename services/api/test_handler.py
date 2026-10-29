@@ -15,7 +15,7 @@ def event(method, path, *, claims=None, body=None, path_params=None):
         "rawPath": path,
         "requestContext": {
             "http": {"method": method},
-            "authorizer": {"jwt": {"claims": claims or {"email": "employee@example.com"}}},
+            "authorizer": {"jwt": {"claims": claims or {"email": "employee@example.com", "sub": "cognito-sub-123"}}},
         },
         "pathParameters": path_params or {},
         "body": json.dumps(body) if body is not None else None,
@@ -42,7 +42,7 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(json.loads(response["body"]), {"employees": []})
 
     def test_employee_can_read_own_profile_but_execution_arn_is_hidden(self):
-        employee = {"employee_id": "emp-1", "email": "employee@example.com", "execution_arn": "secret-arn"}
+        employee = {"employee_id": "emp-1", "email": "employee@example.com", "cognito_sub": "cognito-sub-123", "execution_arn": "secret-arn"}
         table = Mock()
         table.get_item.return_value = {"Item": employee.copy()}
         with patch.object(handler, "_employees_table", return_value=table):
@@ -50,9 +50,21 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(response["statusCode"], 200)
         self.assertNotIn("execution_arn", json.loads(response["body"])["employee"])
 
+    def test_email_match_without_cognito_sub_does_not_grant_self_access(self):
+        table = Mock()
+        table.get_item.return_value = {
+            "Item": {"employee_id": "emp-3", "email": "employee@example.com"}
+        }
+        with patch.object(handler, "_employees_table", return_value=table):
+            response = handler.lambda_handler(
+                event("GET", "/employees/emp-3", path_params={"employee_id": "emp-3"}),
+                None,
+            )
+        self.assertEqual(response["statusCode"], 403)
+
     def test_employee_cannot_read_another_employee(self):
         table = Mock()
-        table.get_item.return_value = {"Item": {"employee_id": "emp-2", "email": "other@example.com"}}
+        table.get_item.return_value = {"Item": {"employee_id": "emp-2", "email": "other@example.com", "cognito_sub": "different-sub"}}
         with patch.object(handler, "_employees_table", return_value=table):
             response = handler.lambda_handler(event("GET", "/employees/emp-2", path_params={"employee_id": "emp-2"}), None)
         self.assertEqual(response["statusCode"], 403)
