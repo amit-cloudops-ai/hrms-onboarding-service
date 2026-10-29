@@ -42,7 +42,7 @@ Status: **Offline implementation and CI gates passing; live integration unverifi
 
 Status: **Implementation added on `v1-solo`; CI/live verification pending**
 
-- Simulated IT provisioning completes automatically; real mode requires an explicitly configured provisioning Lambda.
+- Simulated IT provisioning writes deterministic laptop/monitor assignments to the equipment table and completes automatically; real mode requires an explicitly configured provisioning Lambda.
 - Stores versioned policy acceptance and resumes `policy_signoff` only after every configured required policy is accepted.
 - Publishes a manager-introduction action-required notification and waits for HR completion.
 - Uses the WP2 task token only for Step Functions callback submission; token values are not returned or logged.
