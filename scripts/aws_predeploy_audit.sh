@@ -132,6 +132,7 @@ done
 section "Cognito OAuth app-client configuration (only when COGNITO_USER_POOL_ID is set)"
 if [ -n "${COGNITO_USER_POOL_ID:-}" ]; then
   CLIENT_IDS="$(aws cognito-idp list-user-pool-clients --region "$REGION" --user-pool-id "$COGNITO_USER_POOL_ID" --max-results 60 --query 'UserPoolClients[].ClientId' --output text 2>/dev/null || true)"
+  [ "$CLIENT_IDS" = "None" ] && CLIENT_IDS=""
   for client_id in $CLIENT_IDS; do
     [ -z "$client_id" ] && continue
     echo "--- $client_id (ClientSecret is intentionally not requested) ---"
@@ -151,6 +152,7 @@ for role_arn in $ROLE_ARNS; do
     --query 'AttachedPolicies[].{Name:PolicyName,Arn:PolicyArn}' --output table
   run_readonly aws iam list-role-policies --role-name "$role_name" --query 'PolicyNames' --output json
   INLINE_NAMES="$(aws iam list-role-policies --role-name "$role_name" --query 'PolicyNames[]' --output text 2>/dev/null || true)"
+  [ "$INLINE_NAMES" = "None" ] && INLINE_NAMES=""
   for policy_name in $INLINE_NAMES; do
     [ -z "$policy_name" ] && continue
     echo "Inline policy: $role_name / $policy_name"
