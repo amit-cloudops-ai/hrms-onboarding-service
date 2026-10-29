@@ -145,6 +145,7 @@ def get_progress(employee_id: str, *, table: Any | None = None) -> dict[str, Any
             "status": record.get("status", "pending"),
             **({"started_at": record["started_at"]} if record.get("started_at") else {}),
             **({"completed_at": record["completed_at"]} if record.get("completed_at") else {}),
+            **({"policy_acceptances": record["policy_acceptances"]} if stage == "policy_signoff" and isinstance(record.get("policy_acceptances"), dict) else {}),
         })
     completed = sum(1 for stage in stages if stage["status"] == "complete")
     return {"employee_id": employee_id, "completed_stages": completed, "total_stages": len(STAGES), "stages": stages}
