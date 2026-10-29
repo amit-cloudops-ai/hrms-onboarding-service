@@ -1,0 +1,144 @@
+{
+  "Comment": "HRMS employee onboarding: four callback stages with 24-hour reminders.",
+  "StartAt": "RunStage",
+  "States": {
+    "RunStage": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "start_stage",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage",
+          "taskToken.$": "$$.Task.Token"
+        }
+      },
+      "TimeoutSeconds": 86400,
+      "ResultPath": "$.callback_result",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.timeout_error",
+          "Next": "SendReminder"
+        }
+      ],
+      "Next": "MarkStageComplete"
+    },
+    "SendReminder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "send_reminder",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "RunStage"
+    },
+    "MarkStageComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "mark_stage_complete",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage"
+        }
+      },
+      "ResultSelector": {
+        "Payload.$": "$.Payload"
+      },
+      "ResultPath": "$.stage_update",
+      "Next": "SelectNextStage"
+    },
+    "SelectNextStage": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "document_collection",
+          "Next": "SetITProvisioning"
+        },
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "it_provisioning",
+          "Next": "SetPolicySignoff"
+        },
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "policy_signoff",
+          "Next": "SetManagerIntro"
+        },
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "manager_intro",
+          "Next": "WorkflowComplete"
+        }
+      ],
+      "Default": "InvalidStage"
+    },
+    "SetITProvisioning": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "it_provisioning"
+      },
+      "Next": "RunStage"
+    },
+    "SetPolicySignoff": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "policy_signoff"
+      },
+      "Next": "RunStage"
+    },
+    "SetManagerIntro": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "manager_intro"
+      },
+      "Next": "RunStage"
+    },
+    "InvalidStage": {
+      "Type": "Fail",
+      "Error": "InvalidStage",
+      "Cause": "The workflow received an unsupported stage."
+    },
+    "WorkflowComplete": {
+      "Type": "Succeed"
+    }
+  }
+}

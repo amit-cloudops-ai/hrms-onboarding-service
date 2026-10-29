@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP2 onboarding workflow and stage tracking support.
+
+Parameters:
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
+    Description: Existing DynamoDB stage table; this template does not create it.
+
+Resources:
+  WorkflowReminderTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: hrms-dev-onboarding-reminders
+
+  WorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: hrms-dev-workflow
+      CodeUri: .
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          STAGES_TABLE: !Ref StagesTableName
+          REMINDER_TOPIC_ARN: !Ref WorkflowReminderTopic
+      Policies:
+        - Statement:
+            - Sid: UpdateOnboardingStageRecords
+              Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !Sub
+                - arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TableName}
+                - TableName: !Ref StagesTableName
+            - Sid: PublishWorkflowReminders
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref WorkflowReminderTopic
+
+  OnboardingStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: hrms-dev-onboarding
+      Type: STANDARD
+      DefinitionUri: state_machine.asl.json
+      DefinitionSubstitutions:
+        WorkflowFunctionArn: !GetAtt WorkflowFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowFunction
+
+Outputs:
+  StateMachineArn:
+    Description: ARN of the onboarding state machine.
+    Value: !Ref OnboardingStateMachine
+  WorkflowFunctionArn:
+    Description: ARN of the workflow support Lambda.
+    Value: !GetAtt WorkflowFunction.Arn
+  ReminderTopicArn:
+    Description: ARN of the reminder SNS topic.
+    Value: !Ref WorkflowReminderTopic
