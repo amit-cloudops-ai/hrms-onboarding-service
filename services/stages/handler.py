@@ -221,10 +221,18 @@ def complete_stage(event: dict[str, Any], *, employees_table: Any | None = None,
     source = event.get("source")
     if stage == "document_collection" and source == "document_validation":
         table = _table("DOCUMENTS_TABLE", "hrms-dev-documents", documents_table)
-        records = table.query(
+        page = table.query(
             KeyConditionExpression=Key("employee_id").eq(employee_id),
             ConsistentRead=True,
-        ).get("Items", [])
+        )
+        records = list(page.get("Items", []))
+        while page.get("LastEvaluatedKey"):
+            page = table.query(
+                KeyConditionExpression=Key("employee_id").eq(employee_id),
+                ConsistentRead=True,
+                ExclusiveStartKey=page["LastEvaluatedKey"],
+            )
+            records.extend(page.get("Items", []))
         statuses = {item.get("doc_type"): item.get("status") for item in records}
         required = ("id_proof", "degree_certificate", "signed_offer_letter")
         if not all(statuses.get(item) == "verified" for item in required):
