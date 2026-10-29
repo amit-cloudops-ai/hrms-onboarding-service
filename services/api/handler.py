@@ -281,6 +281,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
                 progress = get_progress(item["employee_id"], table=stages_table)
                 public_item = dict(item)
                 public_item.pop("execution_arn", None)
+                public_item.pop("cognito_sub", None)
                 output.append({**public_item, "progress": progress})
             return _response(200, {"employees": output})
         except ClientError:
@@ -306,6 +307,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
         if not admin and not _is_self(claims, employee):
             return _error(403, "FORBIDDEN", "You cannot access this employee profile.")
         employee.pop("execution_arn", None)
+        employee.pop("cognito_sub", None)
         return _response(200, {"employee": employee})
 
     if method == "GET" and isinstance(employee_id, str) and path == f"/employees/{employee_id}/documents":
