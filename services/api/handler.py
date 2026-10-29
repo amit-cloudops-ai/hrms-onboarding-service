@@ -264,6 +264,31 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
         except RuntimeError as exc:
             return _error(503, "ONBOARDING_START_FAILED", str(exc))
 
+    # Resolve the signed-in employee from Cognito immutable subject.
+    if method == "GET" and path == "/employees/me":
+        caller_sub = claims.get("sub")
+        if not isinstance(caller_sub, str) or not caller_sub.strip():
+            return _error(401, "AUTHENTICATION_REQUIRED", "A valid Cognito subject is required.")
+        try:
+            table = _employees_table(employees_table)
+            from boto3.dynamodb.conditions import Attr
+            result = table.scan(FilterExpression=Attr("cognito_sub").eq(caller_sub))
+            matches = list(result.get("Items", []))
+            while result.get("LastEvaluatedKey"):
+                result = table.scan(FilterExpression=Attr("cognito_sub").eq(caller_sub), ExclusiveStartKey=result["LastEvaluatedKey"])
+                matches.extend(result.get("Items", []))
+            if not matches:
+                return _error(404, "EMPLOYEE_PROFILE_NOT_LINKED", "No employee profile is linked to this Cognito account.")
+            if len(matches) != 1:
+                logger.error("Multiple employee records are linked to one Cognito subject.")
+                return _error(409, "EMPLOYEE_PROFILE_AMBIGUOUS", "The employee profile requires administrative review.")
+            employee = matches[0]
+            employee_id = employee["employee_id"]
+            public_employee = {k: v for k, v in employee.items() if k not in {"execution_arn", "cognito_sub"}}
+            return _response(200, {"employee": public_employee, "progress": get_progress(employee_id, table=stages_table)})
+        except ClientError:
+            logger.exception("Current employee profile lookup failed.")
+            return _error(502, "DATA_ACCESS_FAILED", "Your employee profile could not be retrieved.")
     if method == "GET" and path == "/employees":
         if not admin:
             return _error(403, "FORBIDDEN", "HR administrator access is required.")
