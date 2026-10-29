@@ -13,7 +13,7 @@ This runbook is for a separately approved test in Amit's AWS account. **Nothing 
 ## Pre-deployment checks
 
 1. Confirm AWS CLI is authenticated to the intended account: `aws sts get-caller-identity`.
-2. Confirm the region is `us-east-1` and the existing DynamoDB tables match `docs/data-model.md`.
+2. Confirm the region is `us-east-1` and the existing DynamoDB tables (employees, stages, documents, and equipment) match `docs/data-model.md`.
 3. Confirm the existing Cognito user pool, app client, and `hr-admins` group.
 4. Confirm the chosen S3 upload origin (exact portal origin) and SNS notification subscriptions.
 5. Confirm a real provisioning adapter is not required for the first test. Use simulated IT provisioning for the first pass.
