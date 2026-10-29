@@ -158,6 +158,24 @@ class CreateEmployeeTests(unittest.TestCase):
 
         self.assertIn("cleanup failed", captured.output[0].lower())
 
+    def test_missing_cognito_subject_triggers_compensating_cleanup(self):
+        self.cognito.admin_create_user.return_value = {"User": {"Attributes": []}}
+        with self.assertRaisesRegex(IdentityError, "immutable user subject"):
+            create_employee(
+                self.payload,
+                table=self.table,
+                cognito=self.cognito,
+                user_pool_id="us-east-1_testpool",
+                employee_id="employee-test-123",
+            )
+        self.cognito.admin_delete_user.assert_called_once_with(
+            UserPoolId="us-east-1_testpool",
+            Username="asha.rao@example.com",
+        )
+        self.table.delete_item.assert_called_once_with(
+            Key={"employee_id": "employee-test-123"}
+        )
+
     def test_returns_identity_error_when_pool_id_missing(self):
         with self.assertRaises(IdentityError):
             create_employee(self.payload, table=self.table, cognito=self.cognito, user_pool_id="")
