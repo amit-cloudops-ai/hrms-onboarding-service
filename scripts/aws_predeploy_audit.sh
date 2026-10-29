@@ -63,9 +63,28 @@ section "Lambda functions with expected prefix"
 run_readonly aws lambda list-functions --region "$REGION" \
   --query "Functions[?starts_with(FunctionName, 'hrms-dev-')].{Name:FunctionName,Runtime:Runtime,Memory:MemorySize,Timeout:Timeout,LastModified:LastModified}" --output table
 
+section "API Gateway HTTP APIs and route authorization"
+API_IDS="$(aws apigatewayv2 get-apis --region "$REGION" --query "Items[?ProtocolType=='HTTP'].ApiId" --output text 2>/dev/null || true)"
+for api_id in $API_IDS; do
+  [ -z "$api_id" ] && continue
+  echo "--- HTTP API $api_id ---"
+  run_readonly aws apigatewayv2 get-api --region "$REGION" --api-id "$api_id" \
+    --query '{Name:Name,Protocol:ProtocolType,Endpoint:ApiEndpoint,Cors:CorsConfiguration}' --output json
+  run_readonly aws apigatewayv2 get-routes --region "$REGION" --api-id "$api_id" \
+    --query 'Items[].{Route:RouteKey,Authorization:AuthorizationType,AuthorizerId:AuthorizerId,Target:Target}' --output table
+done
+
 section "Step Functions state machines"
 run_readonly aws stepfunctions list-state-machines --region "$REGION" \
   --query "stateMachines[?starts_with(name, 'hrms-dev-')].{Name:name,Type:type,Arn:stateMachineArn,Created:creationDate}" --output table
+
+STATE_MACHINE_ARNS="$(aws stepfunctions list-state-machines --region "$REGION" --query "stateMachines[?contains(name, 'hrms-dev-')].stateMachineArn" --output text 2>/dev/null || true)"
+for state_machine_arn in $STATE_MACHINE_ARNS; do
+  [ -z "$state_machine_arn" ] && continue
+  echo "--- deployed state machine ---"
+  run_readonly aws stepfunctions describe-state-machine --region "$REGION" --state-machine-arn "$state_machine_arn" \
+    --query '{Name:name,Type:type,Status:status,RoleArn:roleArn,Definition:definition}' --output json
+done
 
 section "HRMS S3 bucket security metadata (no objects/versions listed)"
 run_readonly aws s3api list-buckets --query "Buckets[?contains(Name, 'hrms') || contains(Name, 'documents')].{Name:Name,Created:CreationDate}" --output table
@@ -81,6 +100,15 @@ done
 
 section "SNS topics in target region (names/ARNs only)"
 run_readonly aws sns list-topics --region "$REGION" --query "Topics[?contains(TopicArn, ':hrms-dev-')]" --output table
+
+section "HRMS SNS subscription status (endpoint values omitted)"
+TOPIC_ARNS="$(aws sns list-topics --region "$REGION" --query "Topics[?contains(TopicArn, ':hrms-dev-')].TopicArn" --output text 2>/dev/null || true)"
+for topic_arn in $TOPIC_ARNS; do
+  [ -z "$topic_arn" ] && continue
+  echo "--- $topic_arn ---"
+  run_readonly aws sns list-subscriptions-by-topic --region "$REGION" --topic-arn "$topic_arn" \
+    --query 'Subscriptions[].{Protocol:Protocol,SubscriptionArn:SubscriptionArn}' --output table
+done
 
 section "Recent AWS cost — last 30 days (requires Cost Explorer permission)"
 run_readonly aws ce get-cost-and-usage --time-period "Start=$START_DATE,End=$END_DATE" \
