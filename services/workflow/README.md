@@ -49,6 +49,33 @@ invoke a WP4 stage-specific business handler in this branch; that remains a
 separate integration contract and must be agreed and tested before claiming
 the entire HRMS onboarding product is end-to-end complete.
 
+## Callback integration contract
+
+WP5 invokes `services.workflow.callbacks.resume_stage` only after verifying the
+JWT claim and HR-admin group. The callback helper reads the active token using
+the composite key `{employee_id, stage}`, requires the record to be
+`in_progress`, and submits this result to Step Functions:
+
+```json
+{
+  "employee_id": "employee-uuid",
+  "stage": "document_collection",
+  "status": "complete"
+}
+```
+
+The token itself is passed only to `SendTaskSuccess`; it is never included in
+the callback output, API response, or logs. The API returns HTTP 202 with
+`completion_submitted` after Step Functions accepts the callback. The state
+machine's next state writes the completed status. A 202 response therefore
+means submission was accepted, not that the full state machine has finished.
+
+The workflow role needs `dynamodb:UpdateItem` for stage lifecycle updates and
+the state-machine role needs permission to invoke the workflow Lambda. The API
+role needs `dynamodb:GetItem` and `states:SendTaskSuccess` for callback
+submission. These permissions are described in the SAM templates and must be
+checked against the actual deployed role before release.
+
 ## Local tests
 
 From the repository root:
