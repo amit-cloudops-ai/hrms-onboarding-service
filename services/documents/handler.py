@@ -204,6 +204,9 @@ def verify_uploaded_object(bucket: str, key: str, *, documents_table: Any | None
         return {"ok": False, "reason": "unregistered_object"}
     # S3 notifications are at-least-once; terminal records make retries idempotent.
     if record.get("status") in ("verified", "rejected"):
+        if record.get("status") == "verified" and all_required_verified(employee_id, table=table):
+            # Retry a previously failed stage callback on duplicate S3 delivery.
+            _complete_document_stage(employee_id)
         return {"ok": record["status"] == "verified", "employee_id": employee_id,
                 "document_type": doc_type, "status": record["status"]}
     client = _s3(s3)
