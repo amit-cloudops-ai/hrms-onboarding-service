@@ -39,15 +39,15 @@ Status: **Offline implementation and template gates passing; live integration un
 
 ## Verification log
 
-GitHub Actions workflow run **#10** for commit `d72012f3c61b1629ca2727a908b3508b67444c01` completed successfully. The run passed:
+GitHub Actions workflow run **#35** for commit `33367925965e6580a7e42b68cee4d2d1286144e8` completed successfully. It passed all 52 tests and validations:
 
 - ASL JSON syntax validation.
 - SAM lint validation for `services/api/template.yaml`.
 - SAM lint validation for `services/workflow/template.yaml`.
-- WP1 identity unit tests.
-- WP5 API unit tests.
-- WP2 workflow handler unit tests.
-- WP2 callback helper unit tests.
+- WP1 identity tests: 16 passed.
+- WP5 API tests: 19 passed.
+- WP2 workflow handler tests: 9 passed.
+- WP2 callback helper tests: 8 passed.
 
 These are offline/mocked tests. They do not prove live AWS behavior.
 
