@@ -40,11 +40,14 @@ send it to a browser or employee. WP5 must authorize the completion request,
 retrieve the stored token server-side, and call `SendTaskSuccess`. A token from
 an expired callback task cannot resume that task.
 
-## Stage-handler integration boundary
+## Integration boundary
 
-This milestone records stage lifecycle state and waits for authorized callbacks.
-The stage-specific business actions owned by WP4 must be connected and tested
-with Sushmitha's handlers before claiming full end-to-end completion.
+WP2 owns stage sequencing, callback-token lifecycle, stage-state persistence,
+and timeout reminders. WP5 owns the authenticated HR completion endpoint and
+server-side callback submission. The state machine intentionally does not
+invoke a WP4 stage-specific business handler in this branch; that remains a
+separate integration contract and must be agreed and tested before claiming
+the entire HRMS onboarding product is end-to-end complete.
 
 ## Local tests
 
@@ -62,13 +65,14 @@ Review the generated change set, table existence, IAM permissions, topic
 subscriptions, and account/region before deploying. No deployment is performed
 by the local test command.
 
-## Known follow-up work
+## Verification and release boundary
 
-- Connect WP5's authorized callback endpoint to `SendTaskSuccess`.
-- Integrate and contract-test WP4 stage-specific handlers.
-- Add execution-start persistence (`execution_arn`) and recoverable behavior for
-  failures between identity creation and workflow initiation.
-- Validate the ASL with AWS tooling and run an end-to-end test in a non-production
-  environment before production use.
-- Reminder delivery is at-least-once; monitor SNS delivery and handle duplicate
-  notifications operationally.
+- Offline tests cover the workflow helper actions and server-side callback helper.
+- The CI workflow validates the ASL JSON and runs SAM lint validation for both
+  the API and workflow templates.
+- No AWS resources have been deployed by this implementation. Runtime IAM,
+  actual DynamoDB key schemas, Cognito authorizer claims, Step Functions callback
+  behavior, SNS delivery, and timeout behavior still require a separately approved
+  non-production integration test before a live release.
+- Reminder delivery is at-least-once; operational monitoring must account for
+  duplicate notifications.
