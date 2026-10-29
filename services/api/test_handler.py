@@ -49,6 +49,7 @@ class ApiResponseTests(unittest.TestCase):
             response = handler.lambda_handler(event("GET", "/employees/emp-1", path_params={"employee_id": "emp-1"}), None)
         self.assertEqual(response["statusCode"], 200)
         self.assertNotIn("execution_arn", json.loads(response["body"])["employee"])
+        self.assertNotIn("cognito_sub", json.loads(response["body"])["employee"])
 
     def test_email_match_without_cognito_sub_does_not_grant_self_access(self):
         table = Mock()
