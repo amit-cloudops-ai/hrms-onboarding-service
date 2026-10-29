@@ -43,7 +43,7 @@ class ApiResponseTests(unittest.TestCase):
         }]}
         stages = Mock()
         stages.query.return_value = {"Items": []}
-        with patch.object(handler, "_employees_table", return_value=employees), \\
+        with patch.object(handler, "_employees_table", return_value=employees), \
              patch.object(handler, "_stages_table", return_value=stages):
             response = handler.lambda_handler(event("GET", "/employees/me"), None)
         self.assertEqual(response["statusCode"], 200)
