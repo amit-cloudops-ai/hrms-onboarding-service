@@ -33,6 +33,10 @@ Parameters:
     Type: String
     Default: hr-admins
 
+Conditions:
+  HasDocumentsFunction: !Not [!Equals [!Ref DocumentsFunctionName, '']]
+  HasStagesFunction: !Not [!Equals [!Ref StagesFunctionName, '']]
+
 Resources:
   OnboardingApi:
     Type: AWS::Serverless::HttpApi
@@ -101,16 +105,22 @@ Resources:
                 - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminDeleteUser
               Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
-            - Sid: InvokeDocumentAdapter
-              Effect: Allow
-              Action:
-                - lambda:InvokeFunction
-              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${DocumentsFunctionName}'
-            - Sid: InvokeStageAdapter
-              Effect: Allow
-              Action:
-                - lambda:InvokeFunction
-              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+            - !If
+              - HasDocumentsFunction
+              - Sid: InvokeDocumentAdapter
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${DocumentsFunctionName}'
+              - !Ref AWS::NoValue
+            - !If
+              - HasStagesFunction
+              - Sid: InvokeStageAdapter
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+              - !Ref AWS::NoValue
       Events:
         CreateEmployee:
           Type: HttpApi
