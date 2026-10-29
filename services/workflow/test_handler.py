@@ -1,6 +1,7 @@
 """Unit tests for WP2 workflow stage helpers."""
 import os
 import unittest
+from io import BytesIO
 from unittest.mock import Mock, patch
 
 from handler import (
@@ -21,12 +22,17 @@ class StartStageTests(unittest.TestCase):
             "taskToken": "secret-task-token",
         }
 
+    @patch.dict(os.environ, {"STAGES_FUNCTION_NAME": "hrms-dev-stages"})
     def test_stores_callback_token_but_never_returns_it(self):
-        result = start_stage(
-            self.event,
-            table=self.table,
-            now="2026-10-29T12:00:00+00:00",
-        )
+        with patch("handler.boto3.client") as client:
+            client.return_value.invoke.return_value = {
+                "Payload": BytesIO(b'{"ok":true,"status":"waiting_for_completion"}')
+            }
+            result = start_stage(
+                self.event,
+                table=self.table,
+                now="2026-10-29T12:00:00+00:00",
+            )
         kwargs = self.table.update_item.call_args.kwargs
         self.assertEqual(
             kwargs["Key"],
