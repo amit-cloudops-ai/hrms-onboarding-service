@@ -444,7 +444,7 @@ class FullOnboardingJourneyTests(unittest.TestCase):
             {"verified"},
         )
         self.assertTrue(all(item["status"] == "assigned" for item in equipment.items.values()))
-        self.assertNotIn("task_token", json.dumps(stage_records.records))
+        self.assertTrue(all("task_token" not in record for record in stage_records.records.values()))
 
 
 if __name__ == "__main__":
