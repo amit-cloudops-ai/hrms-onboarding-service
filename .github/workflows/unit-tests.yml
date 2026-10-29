@@ -24,6 +24,8 @@ jobs:
           python-version: "3.12"
       - name: Install test dependency
         run: python -m pip install --upgrade boto3
+      - name: Check read-only AWS audit script syntax
+        run: bash -n scripts/aws_predeploy_audit.sh
       - name: Validate workflow definition JSON
         run: python -m json.tool services/workflow/state_machine.asl.json > /dev/null
       - name: Install AWS SAM CLI for template validation
