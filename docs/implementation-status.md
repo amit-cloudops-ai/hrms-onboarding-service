@@ -29,7 +29,7 @@ Status: **Offline implementation and template gates passing; live integration un
 
 ## WP3 — Documents
 
-Status: **Implementation added on `v1-solo`; CI/live verification pending**
+Status: **Offline implementation and CI gates passing; live integration unverified**
 
 - Issues short-lived, object-scoped presigned PUT URLs for the three contract document types.
 - Uses immutable Cognito-sub authorization and records metadata in the existing documents table.
@@ -60,17 +60,18 @@ Status: **Offline implementation and template gates passing; live integration un
 
 ## Verification log
 
-The earlier WP1/WP2/WP5 baseline run below passed before WP3/WP4 were added. The solo-branch CI workflow now also validates the WP3/WP4 SAM templates and runs their regression tests. The new WP3/WP4 test run has not yet been independently confirmed here; do not treat the full five-package integration as verified until that run passes.
+GitHub Actions run **#90** passed on validation commit `04353204dc8a001f680bacb57304499e48d9e122`. The WP1/WP2/WP3/WP4/WP5 code, tests, templates, and CI workflow on that validation branch were checked against `v1-solo` and have matching file contents. The run passed all 73 tests and all four SAM template validations.
 
-GitHub Actions workflow run **#35** for commit `33367925965e6580a7e42b68cee4d2d1286144e8` completed successfully. It passed all 52 tests and validations:
+GitHub Actions workflow run **#90** for validation commit `04353204dc8a001f680bacb57304499e48d9e122` completed successfully. It passed all 73 tests and validations:
 
 - ASL JSON syntax validation.
-- SAM lint validation for `services/api/template.yaml`.
-- SAM lint validation for `services/workflow/template.yaml`.
+- SAM lint validation for `services/api/template.yaml`, `services/workflow/template.yaml`, `services/documents/template.yaml`, and `services/stages/template.yaml`.
 - WP1 identity tests: 16 passed.
-- WP5 API tests: 19 passed.
+- WP5 API tests: 20 passed.
 - WP2 workflow handler tests: 9 passed.
 - WP2 callback helper tests: 8 passed.
+- WP3 document service tests: 8 passed.
+- WP4 stage service tests: 12 passed.
 
 These are offline/mocked tests. They do not prove live AWS behavior.
 
