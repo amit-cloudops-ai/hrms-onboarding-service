@@ -146,7 +146,8 @@ def _it_provisioning(employee_id: str, task_token: str, *, sfn: Any | None = Non
     _send_task_success(task_token, {"employee_id": employee_id, "stage": "it_provisioning",
                                     "status": "complete", "provisioning": result}, sfn=sfn)
     return {"ok": True, "employee_id": employee_id, "stage": "it_provisioning",
-            "status": "completion_submitted", "mode": result["mode"]}
+            "status": "completion_submitted", "mode": result["mode"],
+            **({"assets": result["assets"]} if isinstance(result.get("assets"), list) else {})}
 
 
 def start_stage(event: dict[str, Any], *, stages_table: Any | None = None,
