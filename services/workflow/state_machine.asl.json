@@ -22,7 +22,8 @@
             "Lambda.ServiceException",
             "Lambda.AWSLambdaException",
             "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
           ],
           "IntervalSeconds": 2,
           "BackoffRate": 2,
