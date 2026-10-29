@@ -25,7 +25,28 @@ Status: **Offline implementation and template gates passing; live integration un
 - Stores callback tokens server-side and never returns them in responses or reminder messages.
 - Waits up to 24 hours for each callback, sends a reminder on timeout, and starts a new callback wait.
 - Persists stage completion after Step Functions accepts the callback.
-- Stage-specific business handlers are an external integration boundary and are not implemented by this WP2 package.
+- Dispatches each active stage to WP4 and clears the token if dispatch fails; WP4 owns stage-specific behavior.
+
+## WP3 — Documents
+
+Status: **Implementation added on `v1-solo`; CI/live verification pending**
+
+- Issues short-lived, object-scoped presigned PUT URLs for the three contract document types.
+- Uses immutable Cognito-sub authorization and records metadata in the existing documents table.
+- Validates actual object size, content type, and PDF/JPEG/PNG magic bytes on S3 object-created events.
+- Rejects invalid files, deletes the rejected object, notifies the HR SNS topic, and supports safe re-upload after expiry/rejection.
+- Resumes document collection only after all three required documents are verified.
+- The SAM template creates a private encrypted/versioned bucket, CORS configuration, S3 trigger, notification topic, and service IAM policy.
+
+## WP4 — Stage handlers
+
+Status: **Implementation added on `v1-solo`; CI/live verification pending**
+
+- Simulated IT provisioning completes automatically; real mode requires an explicitly configured provisioning Lambda.
+- Stores versioned policy acceptance and resumes `policy_signoff` only after every configured required policy is accepted.
+- Publishes a manager-introduction action-required notification and waits for HR completion.
+- Uses the WP2 task token only for Step Functions callback submission; token values are not returned or logged.
+- Includes a SAM template with stage-handler IAM permissions and notification topic.
 
 ## WP5 — API
 
@@ -35,9 +56,11 @@ Status: **Offline implementation and template gates passing; live integration un
 - Enforces HR-admin checks and immutable-sub employee self-access checks.
 - Creates employee identity and starts the onboarding execution, persisting its execution ARN privately.
 - Exposes server-side callback completion without exposing task tokens.
-- Document and policy operations fail closed with a 503 response until their adapter functions are configured; they do not report false success.
+- Routes document and policy operations to the configured WP3/WP4 adapters and fail closed if an adapter is missing or fails.
 
 ## Verification log
+
+The earlier WP1/WP2/WP5 baseline run below passed before WP3/WP4 were added. The solo-branch CI workflow now also validates the WP3/WP4 SAM templates and runs their regression tests. The new WP3/WP4 test run has not yet been independently confirmed here; do not treat the full five-package integration as verified until that run passes.
 
 GitHub Actions workflow run **#35** for commit `33367925965e6580a7e42b68cee4d2d1286144e8` completed successfully. It passed all 52 tests and validations:
 
@@ -55,5 +78,5 @@ These are offline/mocked tests. They do not prove live AWS behavior.
 
 - No AWS deployment or live integration test has been performed.
 - Before a live release, validate the deployed IAM role behavior, existing DynamoDB table schemas and indexes, Cognito JWT claims, Step Functions callback and timeout behavior, and SNS reminder delivery in an explicitly approved non-production environment.
-- Document/policy routes require their separately owned adapter integrations before those routes can serve production traffic.
+- Deploy WP4 first, then WP3 and WP2, then WP5 with the emitted function/state-machine outputs; follow `docs/solo-integration-runbook.md`.
 - Do not describe the entire HRMS product as end-to-end production-ready until external adapters and live integration tests are complete.
