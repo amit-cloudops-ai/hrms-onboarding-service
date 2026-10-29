@@ -159,7 +159,7 @@ class ApiResponseTests(unittest.TestCase):
         )
         employees = Mock()
         employees.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
-        with patch.object(handler, "_employees_table", return_value=employees), \\
+        with patch.object(handler, "_employees_table", return_value=employees), \
              patch.object(handler, "_invoke_service", return_value=handler._response(202, {"status": "completion_submitted"})) as invoke:
             response = handler.lambda_handler(req, None)
         self.assertEqual(response["statusCode"], 202)
