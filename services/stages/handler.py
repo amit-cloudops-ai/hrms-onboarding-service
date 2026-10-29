@@ -266,6 +266,10 @@ def complete_stage(event: dict[str, Any], *, employees_table: Any | None = None,
     else:
         return {"statusCode": 400, "headers": {"content-type": "application/json"},
                 "body": json.dumps({"error": {"code": "INVALID_COMPLETION_SOURCE", "message": "This stage cannot be completed by this action"}})}
+    current = _stage_record(employee_id, stage, stages_table)
+    if current and current.get("status") == "complete":
+        return {"statusCode": 200, "headers": {"content-type": "application/json"},
+                "body": json.dumps({"employee_id": employee_id, "stage": stage, "status": "complete"})}
     result = _complete(employee_id, stage, table=stages_table, sfn=sfn, source=source)
     if not result.get("ok"):
         return {"statusCode": result.get("status", 409), "headers": {"content-type": "application/json"},
