@@ -70,6 +70,65 @@ class ApiResponseTests(unittest.TestCase):
             response = handler.lambda_handler(event("GET", "/employees/emp-2", path_params={"employee_id": "emp-2"}), None)
         self.assertEqual(response["statusCode"], 403)
 
+    def test_other_employee_cannot_request_upload_url_or_sign_policy(self):
+        employee_table = Mock()
+        employee_table.get_item.return_value = {
+            "Item": {
+                "employee_id": "emp-other",
+                "email": "employee@example.com",
+                "cognito_sub": "different-subject",
+            }
+        }
+        upload = event(
+            "POST", "/employees/emp-other/documents/upload-url",
+            body={"document_type": "id_proof"},
+            path_params={"employee_id": "emp-other"},
+        )
+        sign = event(
+            "POST", "/employees/emp-other/policies/sign",
+            body={"policy_id": "acceptable-use"},
+            path_params={"employee_id": "emp-other"},
+        )
+        with patch.object(handler, "_employees_table", return_value=employee_table), \\
+             patch.object(handler, "_invoke_service") as invoke:
+            upload_response = handler.lambda_handler(upload, None)
+            sign_response = handler.lambda_handler(sign, None)
+        self.assertEqual(upload_response["statusCode"], 403)
+        self.assertEqual(sign_response["statusCode"], 403)
+        invoke.assert_not_called()
+
+    def test_employee_list_does_not_leak_internal_identity_or_execution_fields(self):
+        employees = Mock()
+        employees.scan.return_value = {"Items": [{
+            "employee_id": "emp-1",
+            "email": "employee@example.com",
+            "cognito_sub": "internal-sub",
+            "execution_arn": "internal-execution-arn",
+        }]}
+        stages = Mock()
+        stages.query.return_value = {"Items": []}
+        claims = {"email": "hr@example.com", "cognito:groups": ["hr-admins"]}
+        with patch.object(handler, "_employees_table", return_value=employees), \\
+             patch.object(handler, "_stages_table", return_value=stages):
+            response = handler.lambda_handler(event("GET", "/employees", claims=claims), None)
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        serialized = json.dumps(body)
+        self.assertNotIn("internal-sub", serialized)
+        self.assertNotIn("internal-execution-arn", serialized)
+
+    def test_downstream_lambda_function_error_is_sanitized(self):
+        payload = Mock()
+        payload.read.return_value = b'{"error":"secret details"}'
+        with patch.object(handler.boto3, "client") as client:
+            client.return_value.invoke.return_value = {
+                "FunctionError": "Unhandled",
+                "Payload": payload,
+            }
+            response = handler._invoke_service("adapter-name", {"action": "list_documents"})
+        self.assertEqual(response["statusCode"], 502)
+        self.assertNotIn("secret details", response["body"])
+
     def test_malformed_json_is_400(self):
         req = event("POST", "/employees", claims={"email": "hr@example.com", "cognito:groups": ["hr-admins"]})
         req["body"] = "{"
