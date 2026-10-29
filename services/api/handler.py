@@ -77,12 +77,15 @@ def _is_admin(claims: dict[str, Any]) -> bool:
 
 
 def _is_self(claims: dict[str, Any], employee: dict[str, Any]) -> bool:
-    caller_email = claims.get("email")
-    employee_email = employee.get("email")
+    """Authorize self-service by Cognito's immutable subject, never mutable email."""
+    caller_sub = claims.get("sub")
+    employee_sub = employee.get("cognito_sub")
     return (
-        isinstance(caller_email, str)
-        and isinstance(employee_email, str)
-        and caller_email.strip().lower() == employee_email.strip().lower()
+        isinstance(caller_sub, str)
+        and bool(caller_sub.strip())
+        and isinstance(employee_sub, str)
+        and bool(employee_sub.strip())
+        and caller_sub == employee_sub
     )
 
 
