@@ -85,6 +85,11 @@ class CreateEmployeeTests(unittest.TestCase):
         }
         self.table = Mock()
         self.cognito = Mock()
+        self.cognito.admin_create_user.return_value = {
+            "User": {
+                "Attributes": [{"Name": "sub", "Value": "cognito-sub-123"}],
+            }
+        }
 
     def test_writes_employee_and_creates_cognito_user(self):
         result = create_employee(
@@ -102,6 +107,11 @@ class CreateEmployeeTests(unittest.TestCase):
         self.assertEqual(item["email"], "asha.rao@example.com")
         self.assertEqual(item["status"], "in_progress")
         self.cognito.admin_create_user.assert_called_once()
+        self.table.update_item.assert_called_once()
+        self.assertEqual(
+            self.table.update_item.call_args.kwargs["ExpressionAttributeValues"][":sub"],
+            "cognito-sub-123",
+        )
         cognito_args = self.cognito.admin_create_user.call_args.kwargs
         self.assertEqual(cognito_args["Username"], "asha.rao@example.com")
         self.assertEqual(cognito_args["UserPoolId"], "us-east-1_testpool")
