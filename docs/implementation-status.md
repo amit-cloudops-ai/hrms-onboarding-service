@@ -91,7 +91,7 @@ Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integ
 Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integration pending verification**
 
 - Adds a premium, responsive operations overview with stage completion analytics, cohort metrics, upcoming start dates, search/filter, employee details, CSV export, and a create-new-hire form.
-- The create form maps to `POST /employees`; the list reads `GET /employees` when configured for live mode.
+- The create form maps to `POST /employees` using the backend's required `full_name`, `joining_date`, and `employment_type` fields; the list reads `GET /employees` and maps the backend's `full_name`, `joining_date`, and `progress.stages` fields when configured for live mode.
 - Includes a clearly labelled demo workspace; demo-created employees are local UI state and do not create AWS resources.
 - **Release limitation:** Cognito sign-in/session wiring and live API response-shape verification are still required for the protected API. Validate the live flow before treating WP6/WP7 as end-to-end integrated.
 
@@ -99,7 +99,7 @@ Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integ
 
 - Added `.github/workflows/frontend-build.yml` to install dependencies and run production builds for both Vite apps on changes to `v1-solo`.
 - The first build run exposed a missing Vite type declaration (`ImportMeta.env`) in both apps. Added `src/vite-env.d.ts` to each frontend on `v1-solo`.
-- GitHub Actions run [40920740247](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920740247) passed for both `portal` and `hr-dashboard` after the fix. This confirms TypeScript compilation and Vite production builds only; it does **not** validate live Cognito/API integration.
+- GitHub Actions runs [40920740247](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920740247) and [40920891189](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920891189) passed for both `portal` and `hr-dashboard`. The latest run follows the API payload mapping correction. This confirms TypeScript compilation and Vite production builds only; it does **not** validate live Cognito/API integration.
 
 ## Release boundary
 
