@@ -234,7 +234,7 @@ def verify_uploaded_object(bucket: str, key: str, *, documents_table: Any | None
             ExpressionAttributeValues={":status": "rejected", ":now": timestamp},
         )
         try:
-            client.delete_object(Bucket=bucket, Key=key)
+            client.delete_object(Bucket=bucket, Key=key, **({"VersionId": head["VersionId"]} if head.get("VersionId") else {}))
         except ClientError:
             logger.error("Could not remove rejected document object.")
         topic = os.environ.get("HR_NOTIFICATION_TOPIC_ARN", "")
