@@ -19,7 +19,9 @@ npm run build
 ```
 
 ## Configuration
-Copy `.env.example` to `.env.local`. Set `VITE_API_BASE_URL` to the deployed API Gateway base URL and `VITE_DEMO_MODE=false` to use the API. Without an API base URL the dashboard stays in preview mode. Never expose AWS credentials or privileged tokens in frontend variables.
+Copy `.env.example` to `.env.local`. Set `VITE_API_BASE_URL` to the deployed API Gateway HTTP API endpoint (the templates use the `$default` stage; do not append `/dev`) and set `VITE_DEMO_MODE=false`. Configure the Cognito managed-login domain, public app-client ID, and the exact redirect/sign-out URLs. Use the same Cognito user pool as the employee portal, with **authorization code grant + PKCE**, no app-client secret, and `openid email profile` scopes. Add the local and deployed URLs to Cognito's callback and sign-out allowlists.
+
+The dashboard sends a Cognito ID token as a bearer token. API Gateway verifies it; the backend's `hr-admins` group check gates list/create/stage-completion operations. Do not expose AWS credentials, client secrets, or privileged tokens in frontend variables. Without API configuration, the dashboard remains a clearly labelled demo.
 
 ## API integration notes
-Uses `GET /employees` and `POST /employees` from `../../docs/api-contract.md`. The dashboard expects the list response to include employee identifiers and stage status; confirm deployed response shapes and auth headers in live integration. API Gateway/Cognito and backend role checks remain the security boundary. Demo mode is not connected to a backend.
+Uses `GET /employees` and `POST /employees` from `../../docs/api-contract.md`. The list response uses the backend's `employee_id`, `full_name`, `joining_date`, and `progress.stages` fields. The create request sends the required `full_name`, `email`, `role`, `department`, `joining_date`, and `employment_type` fields. API Gateway/Cognito and backend role checks remain the security boundary. Demo mode is not connected to a backend.
