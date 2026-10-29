@@ -103,7 +103,7 @@ Status: **Cognito/API client wiring implemented; production build verified; live
 
 - Added `.github/workflows/frontend-build.yml` to install dependencies and run `tsc -b && vite build` for both Vite apps.
 - The first run identified missing Vite `ImportMeta.env` declarations; added `src/vite-env.d.ts` to both frontends.
-- GitHub Actions run [40924366978](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40924366978) passed the `portal` and `hr-dashboard` production builds after Cognito wiring, API integration, CORS defaults, and document-verification polling were implemented. Later repository changes did not alter frontend source.
+- GitHub Actions run [40925708705](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40925708705) passed the `portal` and `hr-dashboard` production builds after Cognito wiring, the HR-admin access-denied screen, API integration, CORS defaults, and document-verification polling were implemented.
 
 ## Step 2 — Cognito authentication and API integration
 
@@ -118,7 +118,7 @@ Status: **Cognito/API client wiring implemented; production build verified; live
 - Added `tests/test_onboarding_integration.py` and wired it into `.github/workflows/unit-tests.yml`.
 - The composed success-path test invokes the real identity, document-validation, IT-provisioning, policy-signoff, and manager-completion handlers while using in-memory tables and a mocked Step Functions callback engine.
 - Additional regression cases cover ordered four-stage ASL progression, the 24-hour timeout/reminder loop, document-stage gating until all three files are verified, invalid file signatures and HR notification, retrying rejected documents with a fresh S3 object key, policy advancement only after all three required acceptances, HR-only manager completion, and expired callback handling.
-- GitHub Actions run [40925133142](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40925133142) passed the offline unit-test workflow including the composed journey and rejected-document retry test. The simulated journey does **not** prove live AWS event delivery or service permissions.
+- GitHub Actions run [40925851810](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40925851810) passed the latest offline unit-test workflow. The composed journey and rejected-document retry tests are included in the suite. The simulated journey does **not** prove live AWS event delivery or service permissions.
 
 ## Step 4 — AWS configuration and cost audit
 
