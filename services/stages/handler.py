@@ -95,19 +95,38 @@ def _complete(employee_id: str, stage: str, *, table: Any | None = None, sfn: An
     return {"ok": True, "employee_id": employee_id, "stage": stage, "status": "completion_submitted"}
 
 
+def _record_simulated_assets(employee_id: str, *, equipment_table: Any | None = None,
+                            now: str | None = None) -> list[dict[str, Any]]:
+    """Create deterministic demo equipment assignments; safe to retry."""
+    table = _table("EQUIPMENT_TABLE", "hrms-dev-equipment", equipment_table)
+    timestamp = now or _now()
+    assets = [
+        {"asset_id": f"sim-{employee_id}-laptop", "type": "laptop", "model": "SIMULATED-LAPTOP"},
+        {"asset_id": f"sim-{employee_id}-monitor", "type": "monitor", "model": "SIMULATED-MONITOR"},
+    ]
+    for asset in assets:
+        item = {**asset, "status": "assigned", "assigned_to": employee_id,
+                "provisioning_mode": "simulated", "assigned_at": timestamp}
+        try:
+            table.put_item(Item=item, ConditionExpression="attribute_not_exists(asset_id)")
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            existing = table.get_item(Key={"asset_id": asset["asset_id"]}, ConsistentRead=True).get("Item", {})
+            if existing.get("assigned_to") != employee_id or existing.get("provisioning_mode") != "simulated":
+                raise RuntimeError("A simulated asset ID is already assigned to a different employee") from exc
+    return assets
+
+
 def _it_provisioning(employee_id: str, task_token: str, *, sfn: Any | None = None,
-                     lambda_client: Any | None = None) -> dict[str, Any]:
+                     lambda_client: Any | None = None, equipment_table: Any | None = None) -> dict[str, Any]:
     simulation = os.environ.get("SIMULATION_MODE", "true").strip().lower() in ("1", "true", "yes")
     result: dict[str, Any]
     if simulation:
         result = {
             "mode": "simulated",
             "provisioned": True,
-            "assets": [
-                {"type": "laptop", "status": "requested"},
-                {"type": "email_account", "status": "requested"},
-                {"type": "access_badge", "status": "requested"},
-            ],
+            "assets": _record_simulated_assets(employee_id, equipment_table=equipment_table),
         }
     else:
         function_name = os.environ.get("PROVISIONING_FUNCTION_NAME", "").strip()
