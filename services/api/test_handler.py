@@ -32,6 +32,47 @@ class ApiResponseTests(unittest.TestCase):
         response = handler.lambda_handler(event("GET", "/employees"), None)
         self.assertEqual(response["statusCode"], 403)
 
+    def test_employee_can_resolve_current_profile_by_immutable_subject(self):
+        employees = Mock()
+        employees.scan.return_value = {"Items": [{
+            "employee_id": "emp-current",
+            "full_name": "Test Employee",
+            "email": "employee@example.com",
+            "cognito_sub": "cognito-sub-123",
+            "execution_arn": "private-execution-arn",
+        }]}
+        stages = Mock()
+        stages.query.return_value = {"Items": []}
+        with patch.object(handler, "_employees_table", return_value=employees), \\
+             patch.object(handler, "_stages_table", return_value=stages):
+            response = handler.lambda_handler(event("GET", "/employees/me"), None)
+        self.assertEqual(response["statusCode"], 200)
+        payload = json.loads(response["body"])
+        self.assertEqual(payload["employee"]["employee_id"], "emp-current")
+        self.assertEqual(payload["progress"]["employee_id"], "emp-current")
+        self.assertNotIn("cognito_sub", response["body"])
+        self.assertNotIn("private-execution-arn", response["body"])
+        employees.scan.assert_called_once()
+
+    def test_current_employee_endpoint_returns_not_found_for_unlinked_cognito_subject(self):
+        employees = Mock()
+        employees.scan.return_value = {"Items": []}
+        with patch.object(handler, "_employees_table", return_value=employees):
+            response = handler.lambda_handler(event("GET", "/employees/me"), None)
+        self.assertEqual(response["statusCode"], 404)
+        self.assertEqual(json.loads(response["body"])["error"]["code"], "EMPLOYEE_PROFILE_NOT_LINKED")
+
+    def test_current_employee_endpoint_rejects_ambiguous_subject_linkage(self):
+        employees = Mock()
+        employees.scan.return_value = {"Items": [
+            {"employee_id": "emp-1", "cognito_sub": "cognito-sub-123"},
+            {"employee_id": "emp-2", "cognito_sub": "cognito-sub-123"},
+        ]}
+        with patch.object(handler, "_employees_table", return_value=employees):
+            response = handler.lambda_handler(event("GET", "/employees/me"), None)
+        self.assertEqual(response["statusCode"], 409)
+        self.assertEqual(json.loads(response["body"])["error"]["code"], "EMPLOYEE_PROFILE_AMBIGUOUS")
+
     def test_admin_group_can_list_employees(self):
         table = Mock()
         table.scan.return_value = {"Items": []}
