@@ -81,3 +81,7 @@ Use a real HR-admin JWT and a separate employee account. The employee token's Co
 After testing, remove test employee records and test documents only after confirming the data is disposable. The documents bucket is versioned; remove current objects **and object versions/delete markers** before deleting the stack. Then delete stacks in reverse dependency order: `hrms-dev-api`, `hrms-dev-workflow`, `hrms-dev-documents`, `hrms-dev-stages`. Before stack deletion, inspect each stack's resources and retain any resource that contains data you need. Confirm there are no remaining test Step Functions executions, S3 objects/versions, or SNS subscriptions you intended to remove.
 
 Do not run `sam deploy` or stack deletion automatically. Review the change set and account identity first.
+
+## CI verification
+
+The repository workflow `.github/workflows/unit-tests.yml` validates all four SAM templates and runs the WP1/WP2/WP3/WP4/WP5 offline regression suites on `v1-solo` and pull requests targeting `v1-solo`. These checks use mocks and do not deploy or call live AWS resources.
