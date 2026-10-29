@@ -54,3 +54,6 @@ jobs:
       - name: Stage service tests
         working-directory: .
         run: python -m unittest services.stages.test_handler -v
+      - name: Onboarding journey integration tests
+        working-directory: .
+        run: python -m unittest tests.test_onboarding_integration -v
