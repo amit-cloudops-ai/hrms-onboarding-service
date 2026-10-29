@@ -98,7 +98,8 @@ Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integ
 ## Frontend build verification
 
 - Added `.github/workflows/frontend-build.yml` to install dependencies and run production builds for both Vite apps on changes to `v1-solo`.
-- The workflow has been committed, but a successful run has **not yet been confirmed** in this handoff. Do not describe the frontend builds as passing until GitHub Actions reports success.
+- The first build run exposed a missing Vite type declaration (`ImportMeta.env`) in both apps. Added `src/vite-env.d.ts` to each frontend on `v1-solo`.
+- GitHub Actions run [40920740247](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920740247) passed for both `portal` and `hr-dashboard` after the fix. This confirms TypeScript compilation and Vite production builds only; it does **not** validate live Cognito/API integration.
 
 ## Release boundary
 
