@@ -22,6 +22,14 @@ jobs:
           python-version: "3.12"
       - name: Install test dependency
         run: python -m pip install --upgrade boto3
+      - name: Validate workflow definition JSON
+        run: python -m json.tool services/workflow/state_machine.asl.json > /dev/null
+      - name: Install AWS SAM CLI for template validation
+        run: python -m pip install --upgrade aws-sam-cli
+      - name: Validate API SAM template
+        run: sam validate --lint --template-file services/api/template.yaml
+      - name: Validate workflow SAM template
+        run: sam validate --lint --template-file services/workflow/template.yaml
       - name: Identity tests
         working-directory: services/identity
         run: python -m unittest -v
