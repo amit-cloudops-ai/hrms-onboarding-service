@@ -11,13 +11,19 @@ The Lambda expects API Gateway JWT authorization to be configured for every rout
 - `POST /employees` — HR admin; create identity, start Step Functions, persist `execution_arn`.
 - `GET /employees` — HR admin; list employees with progress.
 - `GET /employees/{employee_id}` — HR admin or matching Cognito subject.
-- `GET /employees/{employee_id}/progress` — HR admin or matching employee email.
+- `GET /employees/{employee_id}/progress` — HR admin or matching Cognito subject.
 - `POST /employees/{employee_id}/documents/upload-url` — matching employee by Cognito subject; delegates to `DOCUMENTS_FUNCTION_NAME` with action `create_upload_url`.
 - `GET /employees/{employee_id}/documents` — HR admin or matching employee; delegates with action `list_documents`.
 - `POST /employees/{employee_id}/policies/sign` — matching employee by Cognito subject; delegates to `STAGES_FUNCTION_NAME` with action `sign_policy`.
 - `POST /employees/{employee_id}/stages/{stage}/complete` — HR admin; submits the stored callback token server-side and never returns it.
 
-The document and stage adapters are dependencies owned by WP3/WP4. If their function names are unset, the API returns `503 SERVICE_NOT_CONFIGURED` rather than fabricating success. The request event shape passed to those adapters is explicit in `_dispatch`; coordinate it with their owners before deployment.
+The document and stage adapters are external integration boundaries, not imported Python packages in this branch. If their function names are unset, the API returns `503 SERVICE_NOT_CONFIGURED`; if invocation fails, it returns a sanitized dependency error. The adapter invocation contract is:
+
+- Documents adapter: `{"action":"list_documents","employee_id":"...","caller":{"email":"...","is_admin":true|false}}`
+- Upload adapter: `{"action":"create_upload_url","employee_id":"...","caller":{"email":"...","is_admin":false},"document":{...}}`
+- Stage/policy adapter: `{"action":"sign_policy","employee_id":"...","caller":{"email":"..."},"policy":{...}}`
+
+The adapter must independently validate all payload fields and enforce its own data constraints. It must never trust a caller identity supplied in the payload as authentication; the API has already authorized the caller, but the adapter should only accept invocation from the API role. Until the adapters are configured and their contract tests pass, those operations are intentionally unavailable rather than returning fake success.
 
 ## Required environment variables
 
