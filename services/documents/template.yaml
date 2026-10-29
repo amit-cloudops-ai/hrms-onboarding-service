@@ -96,6 +96,7 @@ Resources:
                 - s3:PutObject
                 - s3:GetObject
                 - s3:DeleteObject
+                - s3:DeleteObjectVersion
               Resource: !Sub '${DocumentBucket.Arn}/*'
             - Sid: NotifyHRAboutRejectedDocuments
               Effect: Allow
