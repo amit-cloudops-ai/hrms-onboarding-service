@@ -68,6 +68,14 @@ class ValidateEmployeePayloadTests(unittest.TestCase):
                 with self.assertRaises(InvalidEmployeeInput):
                     validate_employee_payload(dict(self.valid, email=email))
 
+    def test_rejects_impossible_joining_date(self):
+        with self.assertRaisesRegex(InvalidEmployeeInput, "valid ISO date"):
+            validate_employee_payload(dict(self.valid, joining_date="2026-02-30"))
+
+    def test_rejects_non_iso_joining_date(self):
+        with self.assertRaisesRegex(InvalidEmployeeInput, "ISO format"):
+            validate_employee_payload(dict(self.valid, joining_date="16/11/2026"))
+
     def test_rejects_non_string_optional_field(self):
         with self.assertRaises(InvalidEmployeeInput):
             validate_employee_payload(dict(self.valid, manager_id=123))
