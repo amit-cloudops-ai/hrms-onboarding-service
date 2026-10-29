@@ -78,28 +78,54 @@ These are offline/mocked tests. They do not prove live AWS behavior.
 
 ## WP6 — New-hire portal
 
-Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integration pending verification**
+Status: **Cognito/API client wiring implemented; production build verified; live AWS authentication remains unverified**
 
-- Adds a premium, responsive employee workspace with a four-stage journey, progress summary, document checklist, policy acknowledgements, equipment/manager status cards, and support dialog.
-- Implements PDF/JPG/PNG document selection with a 5 MB client-side limit and the presigned-upload-URL → S3 PUT flow when configured for live mode.
-- Includes a clearly labelled demo mode that works without AWS resources or credentials.
-- Uses the route contract in `docs/api-contract.md`; browser uploads require matching S3 bucket CORS.
-- **Release limitation:** API Gateway requires Cognito JWTs. Cognito sign-in/session wiring and live response-shape verification still need to be completed before this portal can operate against a protected deployed API.
+- Premium responsive portal with four-stage progress, document checklist, policy acceptance, equipment/manager status, and support dialog.
+- Uses Cognito OAuth authorization-code grant with PKCE, state validation, session-scoped token storage, refresh on expiry, and sign-out. No app-client secret or AWS credential is placed in frontend code.
+- Adds the ID token as a bearer token on API requests and parses the backend's structured error envelopes.
+- Live mode resolves the signed-in employee through `GET /employees/me`, which matches the verified JWT subject to the stored `cognito_sub`. Live mode does not require a hard-coded employee ID.
+- Document uploads check the presigned S3 PUT response, poll the document status for asynchronous verification, and surface verified/rejected/pending status. Required policy acceptances are restored from backend progress metadata.
+- Local demo mode remains available without AWS credentials or side effects.
+- **Live configuration still needs confirmation:** actual Cognito hosted-login domain/client, allowed callback and sign-out URLs/scopes, deployed API endpoint, and the exact deployed portal origin for API/S3 CORS. Those values have not been supplied or verified against a live deployment.
 
 ## WP7 — HR operations dashboard
 
-Status: **UI implemented on `v1-solo`; frontend build and live Cognito/API integration pending verification**
+Status: **Cognito/API client wiring implemented; production build verified; live admin authorization remains unverified**
 
-- Adds a premium, responsive operations overview with stage completion analytics, cohort metrics, upcoming start dates, search/filter, employee details, CSV export, and a create-new-hire form.
-- The create form maps to `POST /employees` using the backend's required `full_name`, `joining_date`, and `employment_type` fields; the list reads `GET /employees` and maps the backend's `full_name`, `joining_date`, and `progress.stages` fields when configured for live mode.
-- Includes a clearly labelled demo workspace; demo-created employees are local UI state and do not create AWS resources.
-- **Release limitation:** Cognito sign-in/session wiring and live API response-shape verification are still required for the protected API. Validate the live flow before treating WP6/WP7 as end-to-end integrated.
+- Premium responsive dashboard with pipeline metrics, four-stage analytics, start dates, search/filter, employee details, CSV export, refresh, notifications, and add-new-hire workflow.
+- Uses the same Cognito OAuth PKCE/session module and sends the ID token as a bearer token for protected API requests.
+- Live employee data is fetched from `GET /employees`; live mode starts empty rather than displaying demo employees.
+- The create form sends the backend's required `full_name`, `email`, `role`, `department`, `joining_date`, and `employment_type` fields.
+- The backend's `hr-admins` Cognito group check remains the authorization boundary for list/create/stage completion. Client-side login state does not grant admin permissions.
+- **Live configuration still needs confirmation:** same Cognito pool/client, dashboard callback and sign-out URLs (local Vite port `:5174`), actual `hr-admins` group membership, deployed API endpoint, and deployed dashboard origin in API CORS.
 
-## Frontend build verification
+## Step 1 — Frontend build verification
 
-- Added `.github/workflows/frontend-build.yml` to install dependencies and run production builds for both Vite apps on changes to `v1-solo`.
-- The first build run exposed a missing Vite type declaration (`ImportMeta.env`) in both apps. Added `src/vite-env.d.ts` to each frontend on `v1-solo`.
-- GitHub Actions runs [40920740247](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920740247) and [40920891189](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40920891189) passed for both `portal` and `hr-dashboard`. The latest run follows the API payload mapping correction. This confirms TypeScript compilation and Vite production builds only; it does **not** validate live Cognito/API integration.
+- Added `.github/workflows/frontend-build.yml` to install dependencies and run `tsc -b && vite build` for both Vite apps.
+- The first run identified missing Vite `ImportMeta.env` declarations; added `src/vite-env.d.ts` to both frontends.
+- GitHub Actions run [40924366978](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40924366978) passed the `portal` and `hr-dashboard` production builds after Cognito wiring, API integration, CORS defaults, and document-verification polling were implemented. Later repository changes did not alter frontend source.
+
+## Step 2 — Cognito authentication and API integration
+
+- Implemented Cognito authorization-code + PKCE in both frontends with state checking, refresh on expiry, sign-out, bearer-token API requests, structured error handling, and configuration examples.
+- Added `GET /employees/me` across the API handler, SAM route, API contract, and tests. It resolves an employee using the authenticated JWT `sub`, never the mutable email claim, and rejects missing or ambiguous links.
+- Exposed the versioned policy-acceptance metadata needed to restore employee policy checkboxes after refresh.
+- Corrected the dashboard create-employee payload to match WP1's input contract. API CORS is now parameterized for separate portal/dashboard origins.
+- API self-access/admin authorization and current-employee lookup have offline regression tests. **Real Cognito hosted login, live tokens, and live API claims have not been tested because the target AWS deployment is not yet available.**
+
+## Step 3 — Mocked end-to-end integration tests
+
+- Added `tests/test_onboarding_integration.py` and wired it into `.github/workflows/unit-tests.yml`.
+- The composed success-path test invokes the real identity, document-validation, IT-provisioning, policy-signoff, and manager-completion handlers while using in-memory tables and a mocked Step Functions callback engine.
+- Additional regression cases cover ordered four-stage ASL progression, the 24-hour timeout/reminder loop, document-stage gating until all three files are verified, invalid file signatures and HR notification, retrying rejected documents with a fresh S3 object key, policy advancement only after all three required acceptances, HR-only manager completion, and expired callback handling.
+- GitHub Actions run [40925133142](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/40925133142) passed the offline unit-test workflow including the composed journey and rejected-document retry test. The simulated journey does **not** prove live AWS event delivery or service permissions.
+
+## Step 4 — AWS configuration and cost audit
+
+- Added [`docs/predeployment-audit.md`](predeployment-audit.md) with the expected table/key/index contract, fixed resource-name collision risks, CORS and Cognito prerequisites, deployment/rollback gates, and cost considerations.
+- Added [`scripts/aws_predeploy_audit.sh`](../scripts/aws_predeploy_audit.sh), a read-only audit script for account identity/region, CloudFormation stacks/resources/outputs, DynamoDB schemas and indexes, Cognito pool/client configuration, API Gateway routes and CORS, Lambda IAM policies, Step Functions definitions, S3 security/CORS/versioning, SNS subscription status, CloudWatch retention, and recent Cost Explorer data.
+- The script does not deploy, update, delete, or list document objects. CI runs `bash -n` against the script.
+- **The live account audit is not complete.** This execution environment does not have the AWS CLI or the user's AWS credentials, so I cannot report the real account ID, existing resource inventory, actual IAM configuration, or actual spend. Run `bash scripts/aws_predeploy_audit.sh` from a terminal authenticated to the intended AWS account and review the output before authorizing deployment.
 
 ## Release boundary
 
