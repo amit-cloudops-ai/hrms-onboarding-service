@@ -2,7 +2,7 @@
 
 ## Local implementation
 
-`handler.py` is the HTTP API Lambda for API Gateway HTTP API payload format 2.0. It implements the contract routes, validates request bodies, checks the `hr-admins` Cognito group for HR-only operations, and limits employee self-service access by matching the authenticated token's `email` claim to the canonical employee record.
+`handler.py` is the HTTP API Lambda for API Gateway HTTP API payload format 2.0. It implements the contract routes, validates request bodies, checks the `hr-admins` Cognito group for HR-only operations, and limits employee self-service access by matching the authenticated token's immutable Cognito `sub` claim to the canonical employee record's `cognito_sub`.
 
 The Lambda expects API Gateway JWT authorization to be configured for every route. The Lambda's own claim checks are additional authorization controls, not a replacement for API Gateway authentication.
 
