@@ -95,21 +95,22 @@ Resources:
                 - states:SendTaskSuccess
               # SendTaskSuccess is authorized by task token and requires wildcard resource scope.
               Resource: '*'
-            - Sid: ManageCognitoIdentityCompensation
+            - Sid: ManageCognitoEmployeeIdentity
               Effect: Allow
               Action:
+                - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminDeleteUser
               Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
             - Sid: InvokeDocumentAdapter
               Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:hrms-dev-documents-*'
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${DocumentsFunctionName}'
             - Sid: InvokeStageAdapter
               Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:hrms-dev-stages-*'
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
       Events:
         CreateEmployee:
           Type: HttpApi
