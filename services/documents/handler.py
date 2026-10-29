@@ -189,6 +189,10 @@ def verify_uploaded_object(bucket: str, key: str, *, documents_table: Any | None
     if not isinstance(record, dict) or record.get("s3_key") != key:
         logger.warning("Ignoring an unregistered document object.")
         return {"ok": False, "reason": "unregistered_object"}
+    # S3 notifications are at-least-once; terminal records make retries idempotent.
+    if record.get("status") in ("verified", "rejected"):
+        return {"ok": record["status"] == "verified", "employee_id": employee_id,
+                "document_type": doc_type, "status": record["status"]}
     client = _s3(s3)
     head = client.head_object(Bucket=bucket, Key=key)
     actual_size = int(head.get("ContentLength", 0))
