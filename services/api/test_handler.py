@@ -129,6 +129,37 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(response["statusCode"], 502)
         self.assertNotIn("secret details", response["body"])
 
+    def test_admin_stage_completion_submits_server_side_callback(self):
+        claims = {"email": "hr@example.com", "cognito:groups": ["hr-admins"]}
+        req = event(
+            "POST", "/employees/emp-1/stages/document_collection/complete",
+            claims=claims,
+            path_params={"employee_id": "emp-1", "stage": "document_collection"},
+        )
+        employees = Mock()
+        employees.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
+        stages = Mock()
+        with patch.object(handler, "_employees_table", return_value=employees), \\
+             patch.object(handler, "_stages_table", return_value=stages), \\
+             patch("services.workflow.callbacks.resume_stage", return_value={
+                 "ok": True, "employee_id": "emp-1",
+                 "stage": "document_collection", "status": "completion_submitted",
+             }) as resume:
+            response = handler.lambda_handler(req, None)
+        self.assertEqual(response["statusCode"], 202)
+        self.assertTrue(resume.call_args.kwargs["authorized"])
+        self.assertNotIn("task_token", response["body"])
+
+    def test_non_admin_cannot_submit_stage_completion(self):
+        req = event(
+            "POST", "/employees/emp-1/stages/document_collection/complete",
+            path_params={"employee_id": "emp-1", "stage": "document_collection"},
+        )
+        with patch("services.workflow.callbacks.resume_stage") as resume:
+            response = handler.lambda_handler(req, None)
+        self.assertEqual(response["statusCode"], 403)
+        resume.assert_not_called()
+
     def test_malformed_json_is_400(self):
         req = event("POST", "/employees", claims={"email": "hr@example.com", "cognito:groups": ["hr-admins"]})
         req["body"] = "{"
