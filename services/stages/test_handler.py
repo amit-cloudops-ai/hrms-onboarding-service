@@ -95,7 +95,7 @@ class PolicySignoffTests(unittest.TestCase):
         )
         self.assertEqual(response["statusCode"], 200)
         self.assertTrue(json.loads(response["body"])["required_policies_complete"])
-        self.stages.update_item.assert_called_once()
+        self.assertEqual(self.stages.update_item.call_count, 2)
         sfn.send_task_success.assert_called_once()
 
     def test_rejects_unaccepted_policy(self):
