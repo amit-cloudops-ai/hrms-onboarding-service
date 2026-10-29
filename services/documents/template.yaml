@@ -97,11 +97,6 @@ Resources:
                 - s3:GetObject
                 - s3:DeleteObject
               Resource: !Sub '${DocumentBucket.Arn}/*'
-            - Sid: IssuePrivateUploadUrls
-              Effect: Allow
-              Action:
-                - s3:ListBucket
-              Resource: !GetAtt DocumentBucket.Arn
             - Sid: NotifyHRAboutRejectedDocuments
               Effect: Allow
               Action:
