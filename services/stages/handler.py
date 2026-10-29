@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError\nfrom boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
 logger = logging.getLogger(__name__)
 VALID_STAGES = ("document_collection", "it_provisioning", "policy_signoff", "manager_intro")
