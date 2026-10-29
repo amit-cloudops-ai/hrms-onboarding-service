@@ -10,11 +10,11 @@ The Lambda expects API Gateway JWT authorization to be configured for every rout
 
 - `POST /employees` — HR admin; create identity, start Step Functions, persist `execution_arn`.
 - `GET /employees` — HR admin; list employees with progress.
-- `GET /employees/{employee_id}` — HR admin or matching employee email.
+- `GET /employees/{employee_id}` — HR admin or matching Cognito subject.
 - `GET /employees/{employee_id}/progress` — HR admin or matching employee email.
-- `POST /employees/{employee_id}/documents/upload-url` — matching employee; delegates to `DOCUMENTS_FUNCTION_NAME` with action `create_upload_url`.
+- `POST /employees/{employee_id}/documents/upload-url` — matching employee by Cognito subject; delegates to `DOCUMENTS_FUNCTION_NAME` with action `create_upload_url`.
 - `GET /employees/{employee_id}/documents` — HR admin or matching employee; delegates with action `list_documents`.
-- `POST /employees/{employee_id}/policies/sign` — matching employee; delegates to `STAGES_FUNCTION_NAME` with action `sign_policy`.
+- `POST /employees/{employee_id}/policies/sign` — matching employee by Cognito subject; delegates to `STAGES_FUNCTION_NAME` with action `sign_policy`.
 - `POST /employees/{employee_id}/stages/{stage}/complete` — HR admin; submits the stored callback token server-side and never returns it.
 
 The document and stage adapters are dependencies owned by WP3/WP4. If their function names are unset, the API returns `503 SERVICE_NOT_CONFIGURED` rather than fabricating success. The request event shape passed to those adapters is explicit in `_dispatch`; coordinate it with their owners before deployment.
