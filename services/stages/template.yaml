@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP4 stage-specific handlers and task-token completion.
+
+Parameters:
+  EmployeesTableName:
+    Type: String
+    Default: hrms-dev-employees
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
+  DocumentsTableName:
+    Type: String
+    Default: hrms-dev-documents
+  SimulationMode:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Use deterministic simulated IT provisioning unless explicitly disabled.
+  ProvisioningFunctionName:
+    Type: String
+    Default: ''
+    Description: Required only when SimulationMode is false; existing real provisioning adapter.
+  RequiredPolicies:
+    Type: String
+    Default: acceptable-use,privacy,security
+    Description: Comma-separated policy IDs that must be accepted before policy_signoff completes.
+
+Conditions:
+  UseRealProvisioning: !Equals [!Ref SimulationMode, 'false']
+  HasProvisioningFunction: !Not [!Equals [!Ref ProvisioningFunctionName, '']]
+
+Resources:
+  StageNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: hrms-dev-stage-notifications
+
+  StageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: hrms-dev-stages
+      CodeUri: ../..
+      Handler: services.stages.handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          STAGES_TABLE: !Ref StagesTableName
+          DOCUMENTS_TABLE: !Ref DocumentsTableName
+          SIMULATION_MODE: !Ref SimulationMode
+          PROVISIONING_FUNCTION_NAME: !Ref ProvisioningFunctionName
+          REQUIRED_POLICIES: !Ref RequiredPolicies
+          STAGE_NOTIFICATION_TOPIC_ARN: !Ref StageNotificationTopic
+      Policies:
+        - Statement:
+            - Sid: ReadEmployeeIdentity
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
+            - Sid: ReadAndUpdateStageLifecycle
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
+            - Sid: VerifyAllRequiredDocuments
+              Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DocumentsTableName}'
+            - Sid: ResumeWaitingWorkflowTasks
+              Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+              Resource: '*'
+            - Sid: NotifyManagerIntroductionOwner
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref StageNotificationTopic
+            - !If
+              - HasProvisioningFunction
+              - Sid: InvokeRealProvisioningProvider
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProvisioningFunctionName}'
+              - !Ref AWS::NoValue
+
+Outputs:
+  StagesFunctionName:
+    Description: Set this output as StagesFunctionName in the API, documents, and workflow templates.
+    Value: !Ref StageFunction
+  StageNotificationTopicArn:
+    Description: Subscribe the authorized HR/manager-introduction notification endpoint to this topic.
+    Value: !Ref StageNotificationTopic
