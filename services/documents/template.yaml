@@ -26,6 +26,7 @@ Resources:
   DocumentBucket:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Sub 'hrms-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}-documents'
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         IgnorePublicAcls: true
@@ -70,7 +71,7 @@ Resources:
         Variables:
           EMPLOYEES_TABLE: !Ref EmployeesTableName
           DOCUMENTS_TABLE: !Ref DocumentsTableName
-          DOCUMENTS_BUCKET: !Ref DocumentBucket
+          DOCUMENTS_BUCKET: !Sub 'hrms-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}-documents'
           STAGES_FUNCTION_NAME: !Ref StagesFunctionName
           HR_NOTIFICATION_TOPIC_ARN: !Ref HrDocumentNotifications
           UPLOAD_URL_TTL_SECONDS: !Ref UploadUrlTtlSeconds
@@ -97,7 +98,7 @@ Resources:
                 - s3:GetObject
                 - s3:DeleteObject
                 - s3:DeleteObjectVersion
-              Resource: !Sub '${DocumentBucket.Arn}/*'
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::hrms-${AWS::AccountId}-${AWS::Region}-${AWS::StackName}-documents/*'
             - Sid: NotifyHRAboutRejectedDocuments
               Effect: Allow
               Action:
