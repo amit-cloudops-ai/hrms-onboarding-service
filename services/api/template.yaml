@@ -30,6 +30,14 @@ Parameters:
   HrAdminGroup:
     Type: String
     Default: hr-admins
+  PortalOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Exact browser origin for the employee portal. Override for the deployed frontend.
+  DashboardOrigin:
+    Type: String
+    Default: http://localhost:5174
+    Description: Exact browser origin for the HR dashboard. Override for the deployed frontend.
 
 Conditions:
   HasDocumentsFunction: !Not [!Equals [!Ref DocumentsFunctionName, '']]
@@ -40,6 +48,18 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: '$default'
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref PortalOrigin
+          - !Ref DashboardOrigin
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        MaxAge: 300
       Auth:
         DefaultAuthorizer: CognitoJwtAuthorizer
         Authorizers:
