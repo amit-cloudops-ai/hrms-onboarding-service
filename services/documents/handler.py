@@ -273,6 +273,12 @@ def _complete_document_stage(employee_id: str) -> None:
         )
         if result.get("FunctionError"):
             logger.error("Document stage completion invocation failed.")
+            return
+        payload = result.get("Payload")
+        raw = payload.read() if hasattr(payload, "read") else payload
+        decoded = json.loads(raw or b"{}")
+        if isinstance(decoded, dict) and isinstance(decoded.get("statusCode"), int) and decoded["statusCode"] >= 400:
+            logger.error("Document collection callback was rejected with HTTP status %s.", decoded["statusCode"])
     except ClientError:
         logger.exception("Document stage completion could not be submitted.")
 
