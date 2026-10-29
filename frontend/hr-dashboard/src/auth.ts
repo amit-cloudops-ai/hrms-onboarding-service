@@ -70,7 +70,7 @@ export function handleAuthRedirect(): Promise<void> {
     window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
     sessionStorage.removeItem(KEYS.state);
     sessionStorage.removeItem(KEYS.verifier);
-    if (providerError) throw new Error("Cognito rejected sign-in. Verify the user pool app client and hosted UI configuration.");
+    if (providerError) { clearTokens(); throw new Error("Cognito rejected sign-in. Verify the user pool app client and hosted UI configuration."); }
     if (!code || !returnedState || !expectedState || returnedState !== expectedState || !verifier) {
       clearTokens();
       throw new Error("The sign-in response could not be validated. Please start sign-in again.");
