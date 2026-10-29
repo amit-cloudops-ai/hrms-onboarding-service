@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP3 private document upload, file validation and status service.
+
+Parameters:
+  EmployeesTableName:
+    Type: String
+    Default: hrms-dev-employees
+  DocumentsTableName:
+    Type: String
+    Default: hrms-dev-documents
+  StagesFunctionName:
+    Type: String
+    Description: WP4 stage-handler Lambda name used to resume document collection.
+  UploadAllowedOrigin:
+    Type: String
+    Default: http://localhost:3000
+    Description: Exact browser origin permitted to upload using a presigned URL.
+  UploadUrlTtlSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 900
+
+Resources:
+  DocumentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref UploadAllowedOrigin
+            AllowedMethods:
+              - PUT
+            AllowedHeaders:
+              - Content-Type
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+
+  HrDocumentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: hrms-dev-document-notifications
+
+  DocumentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: hrms-dev-documents
+      CodeUri: ../..
+      Handler: services.documents.handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          DOCUMENTS_TABLE: !Ref DocumentsTableName
+          DOCUMENTS_BUCKET: !Ref DocumentBucket
+          STAGES_FUNCTION_NAME: !Ref StagesFunctionName
+          HR_NOTIFICATION_TOPIC_ARN: !Ref HrDocumentNotifications
+          UPLOAD_URL_TTL_SECONDS: !Ref UploadUrlTtlSeconds
+      Policies:
+        - Statement:
+            - Sid: ReadCanonicalEmployeeIdentity
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
+            - Sid: ManageDocumentMetadata
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DocumentsTableName}'
+            - Sid: ValidatePrivateDocumentObjects
+              Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource: !Sub '${DocumentBucket.Arn}/*'
+            - Sid: IssuePrivateUploadUrls
+              Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !GetAtt DocumentBucket.Arn
+            - Sid: NotifyHRAboutRejectedDocuments
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref HrDocumentNotifications
+            - Sid: ResumeDocumentCollection
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+      Events:
+        DocumentObjectCreated:
+          Type: S3
+          Properties:
+            Bucket: !Ref DocumentBucket
+            Events: s3:ObjectCreated:*
+
+Outputs:
+  DocumentsFunctionName:
+    Description: Set this value as DocumentsFunctionName in the WP5 API template.
+    Value: !Ref DocumentsFunction
+  DocumentsBucketName:
+    Description: Private bucket for employee documents.
+    Value: !Ref DocumentBucket
+  HrDocumentNotificationsTopicArn:
+    Description: Subscribe the authorized HR notification endpoint to this topic.
+    Value: !Ref HrDocumentNotifications
