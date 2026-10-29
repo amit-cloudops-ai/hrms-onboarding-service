@@ -150,6 +150,25 @@ class ApiResponseTests(unittest.TestCase):
         self.assertTrue(resume.call_args.kwargs["authorized"])
         self.assertNotIn("task_token", response["body"])
 
+    def test_manager_intro_completion_is_routed_through_wp4(self):
+        claims = {"email": "hr@example.com", "sub": "hr-sub", "cognito:groups": ["hr-admins"]}
+        req = event(
+            "POST", "/employees/emp-1/stages/manager_intro/complete",
+            claims=claims,
+            path_params={"employee_id": "emp-1", "stage": "manager_intro"},
+        )
+        employees = Mock()
+        employees.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
+        with patch.object(handler, "_employees_table", return_value=employees), \\
+             patch.object(handler, "_invoke_service", return_value=handler._response(202, {"status": "completion_submitted"})) as invoke:
+            response = handler.lambda_handler(req, None)
+        self.assertEqual(response["statusCode"], 202)
+        payload = invoke.call_args.args[1]
+        self.assertEqual(payload["action"], "complete_stage")
+        self.assertEqual(payload["source"], "hr_admin")
+        self.assertTrue(payload["caller"]["is_admin"])
+        self.assertEqual(payload["caller"]["sub"], "hr-sub")
+
     def test_non_admin_cannot_submit_stage_completion(self):
         req = event(
             "POST", "/employees/emp-1/stages/document_collection/complete",
