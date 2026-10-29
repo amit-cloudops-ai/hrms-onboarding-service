@@ -113,11 +113,12 @@ class PolicySignoffTests(unittest.TestCase):
         sfn.send_task_success.assert_called_once()
 
     def test_rejects_unaccepted_policy(self):
-        response = handler.sign_policy(
-            {"employee_id": "emp-1", "caller": {"sub": "sub-1"}, "policy": {
-                "policy_id": "acceptable-use", "policy_version": "v1", "accepted": False
-            }}, employees_table=self.employees, stages_table=self.stages
-        )
+        with patch.object(handler, "_employee", return_value={"employee_id": "emp-1", "cognito_sub": "sub-1"}):
+            response = handler.lambda_handler(
+                {"action": "sign_policy", "employee_id": "emp-1", "caller": {"sub": "sub-1"}, "policy": {
+                    "policy_id": "acceptable-use", "policy_version": "v1", "accepted": False
+                }}, None
+            )
         self.assertEqual(response["statusCode"], 400)
 
     def test_expired_callback_returns_conflict_not_success(self):
