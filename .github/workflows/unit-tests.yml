@@ -9,6 +9,7 @@ on:
     branches:
       - "team-dev"
       - "main"
+      - "v1-solo"
 
 jobs:
   unit-tests:
