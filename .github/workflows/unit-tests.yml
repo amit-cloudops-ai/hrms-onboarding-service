@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "feature/**"
+      - "v1-solo"
   pull_request:
     branches:
       - "team-dev"
