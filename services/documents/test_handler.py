@@ -59,6 +59,28 @@ class DocumentRequestTests(unittest.TestCase):
                                               employees_table=self.employees, s3=self.s3)
         self.assertEqual(response["statusCode"], 400)
 
+    def test_rejected_document_can_be_retried_with_a_fresh_object_key(self):
+        old_key = "emp-1/id_proof/" + "b" * 32 + ".pdf"
+        self.documents.put_item.side_effect = ClientError(
+            {"Error": {"Code": "ConditionalCheckFailedException", "Message": "exists"}}, "PutItem"
+        )
+        self.documents.get_item.return_value = {"Item": {
+            "employee_id": "emp-1", "doc_type": "id_proof", "s3_key": old_key, "status": "rejected",
+        }}
+        self.s3.generate_presigned_url.return_value = "https://signed.example/retry"
+        with patch.dict(handler.os.environ, {"DOCUMENTS_BUCKET": "private-bucket", "UPLOAD_URL_TTL_SECONDS": "300"}):
+            response = handler.create_upload_url(
+                self.event, documents_table=self.documents,
+                employees_table=self.employees, s3=self.s3, now="retry-time",
+            )
+        self.assertEqual(response["statusCode"], 201)
+        update = self.documents.update_item.call_args.kwargs
+        new_key = update["ExpressionAttributeValues"][":key"]
+        self.assertNotEqual(new_key, old_key)
+        self.assertEqual(update["ExpressionAttributeValues"][":status"], "missing")
+        self.assertIn("upload_url", json.loads(response["body"]))
+        self.s3.generate_presigned_url.assert_called_once()
+
     def test_conflicting_existing_document_returns_409(self):
         self.documents.put_item.side_effect = ClientError(
             {"Error": {"Code": "ConditionalCheckFailedException", "Message": "exists"}}, "PutItem"
