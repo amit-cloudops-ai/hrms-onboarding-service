@@ -392,3 +392,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except ClientError:
         logger.exception("Unhandled AWS service error in API handler.")
         return _error(502, "DEPENDENCY_FAILURE", "A required backend service failed.")
+    except Exception:
+        # Keep internal exception text, request bodies, and credentials out of
+        # the HTTP response. The traceback stays in CloudWatch for operators.
+        logger.exception("Unhandled API handler failure.")
+        return _error(500, "INTERNAL_ERROR", "The request could not be completed.")
