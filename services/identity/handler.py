@@ -165,7 +165,7 @@ def create_employee(
         raise IdentityError("Could not create the employee record.") from exc
 
     try:
-        cognito.admin_create_user(
+        cognito_result = cognito.admin_create_user(
             UserPoolId=pool_id,
             Username=employee["email"],
             DesiredDeliveryMediums=["EMAIL"],
@@ -190,6 +190,55 @@ def create_employee(
         raise IdentityError(
             "Could not create the employee's Cognito identity."
         ) from exc
+
+    # Cognito's immutable sub claim is the authorization key for self-service.
+    # Do not fall back to email: email can change and is not a stable subject ID.
+    cognito_user = cognito_result.get("User", {}) if isinstance(cognito_result, dict) else {}
+    attributes = cognito_user.get("Attributes", []) if isinstance(cognito_user, dict) else []
+    cognito_sub = next(
+        (
+            attribute.get("Value")
+            for attribute in attributes
+            if isinstance(attribute, dict) and attribute.get("Name") == "sub"
+        ),
+        None,
+    )
+    if not isinstance(cognito_sub, str) or not cognito_sub.strip():
+        try:
+            cognito.admin_delete_user(UserPoolId=pool_id, Username=employee["email"])
+        except ClientError:
+            logging.getLogger(__name__).error(
+                "Cognito cleanup failed after missing immutable subject."
+            )
+        try:
+            table.delete_item(Key={"employee_id": new_id})
+        except ClientError:
+            logging.getLogger(__name__).error(
+                "Employee cleanup failed after missing immutable subject."
+            )
+        raise IdentityError("Cognito did not return the immutable user subject.")
+
+    try:
+        table.update_item(
+            Key={"employee_id": new_id},
+            UpdateExpression="SET cognito_sub = :sub",
+            ExpressionAttributeValues={":sub": cognito_sub},
+            ConditionExpression="attribute_exists(employee_id)",
+        )
+    except ClientError as exc:
+        try:
+            cognito.admin_delete_user(UserPoolId=pool_id, Username=employee["email"])
+        except ClientError:
+            logging.getLogger(__name__).error(
+                "Cognito cleanup failed after subject-link persistence failure."
+            )
+        try:
+            table.delete_item(Key={"employee_id": new_id})
+        except ClientError:
+            logging.getLogger(__name__).error(
+                "Employee cleanup failed after subject-link persistence failure."
+            )
+        raise IdentityError("Could not link the employee to the Cognito identity.") from exc
 
     return {
         "employee_id": new_id,
