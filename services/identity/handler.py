@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import boto3
@@ -102,6 +102,14 @@ def validate_employee_payload(payload: Any) -> dict[str, str]:
     email = payload["email"].strip().lower()
     if len(email) > 254 or not _is_valid_email(email):
         raise InvalidEmployeeInput("email must be a valid email address.")
+
+    joining_date = payload["joining_date"].strip()
+    try:
+        parsed_joining_date = date.fromisoformat(joining_date)
+    except ValueError as exc:
+        raise InvalidEmployeeInput("joining_date must be a valid ISO date (YYYY-MM-DD).") from exc
+    if parsed_joining_date.isoformat() != joining_date:
+        raise InvalidEmployeeInput("joining_date must use ISO format YYYY-MM-DD.")
 
     normalized = {
         field: payload[field].strip()
