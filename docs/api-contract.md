@@ -106,12 +106,12 @@ Expected status/code pairs:
 | 400 | `INVALID_REQUEST` | Malformed public JSON request body |
 | 403 | `FORBIDDEN` | Caller is not the employee that owns the record |
 | 404 | `NOT_FOUND` | Employee record does not exist (API layer) |
-| 409 | `DOCUMENT_ALREADY_VERIFIED` | This document type is already uploaded/being processed/verified; do not issue another URL unless the previous record is retryable |
+| 409 | `DOCUMENT_ALREADY_VERIFIED` | An existing document record is in a non-retryable state. In the current WP3 handler, a verified document cannot be uploaded again through this endpoint |
 | 502 | `DEPENDENCY_FAILURE` | WP3 Lambda invocation failed |
 | 502 | `INVALID_DEPENDENCY_RESPONSE` | WP3 returned a malformed response |
 | 503 | `SERVICE_NOT_CONFIGURED` | Documents adapter or private S3 bucket configuration is missing |
 
-If a prior upload URL expired before an object was uploaded, or the prior file was rejected, WP3 may issue a new URL with a fresh random object key. Do not reuse an old presigned URL or object key.
+If a prior upload URL expired before an object was uploaded, or the prior file was rejected, WP3 may issue a new URL with a fresh random object key. The current handler treats existing missing and rejected records as retryable, and an existing verified record as non-retryable (409). A renewed URL replaces the registered object key, so an object uploaded later through an older URL is treated as unregistered. Do not reuse an old presigned URL or object key.
 
 ### Internal WP5 → WP3 Lambda event (not the public API body)
 
