@@ -46,7 +46,7 @@ Success response: HTTP `201 Created`
 
 The URL is for HTTP PUT directly to S3. Upload raw file bytes and send the exact `Content-Type` header returned. The default lifetime is 300 seconds; return the configured TTL actually used. Never include the S3 key or bucket name in the response.
 
-Errors use `{"error":{"code":"...","message":"..."}}`. Relevant conditions include 400 `INVALID_DOCUMENT`, 403 `FORBIDDEN`, 409 `DOCUMENT_ALREADY_VERIFIED`, 502 downstream integration failures and 503 `SERVICE_NOT_CONFIGURED`. See the authoritative examples/table in `docs/api-contract.md`.
+Errors use `{"error":{"code":"...","message":"..."}}`. Relevant conditions include 400 `INVALID_DOCUMENT`, 403 `FORBIDDEN`, 409 `DOCUMENT_ALREADY_VERIFIED` for an existing verified/non-retryable record, 502 downstream integration failures and 503 `SERVICE_NOT_CONFIGURED`. The current handler permits a fresh URL for existing missing or rejected records. See `docs/api-contract.md` for the full mapping.
 
 ## Internal WP5 → WP3 event
 
