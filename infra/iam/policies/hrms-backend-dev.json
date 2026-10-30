@@ -1,0 +1,116 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListBucketsForConsole",
+      "Effect": "Allow",
+      "Action": "s3:ListAllMyBuckets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DocumentBucketsFullAccess",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::hrms-dev-documents-*", "arn:aws:s3:::hrms-dev-documents-*/*"]
+    },
+    {
+      "Sid": "ManageOwnLambdas",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": [
+        "arn:aws:lambda:us-east-1:*:function:hrms-dev-documents-*",
+        "arn:aws:lambda:us-east-1:*:function:hrms-dev-stages-*"
+      ]
+    },
+    {
+      "Sid": "ListLambdas",
+      "Effect": "Allow",
+      "Action": ["lambda:ListFunctions", "lambda:GetAccountSettings"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "UseOnlyApprovedRolesForLambdas",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::*:role/hrms-dev-documents-role",
+        "arn:aws:iam::*:role/hrms-dev-stages-role"
+      ],
+      "Condition": {"StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}}
+    },
+    {
+      "Sid": "ViewRoles",
+      "Effect": "Allow",
+      "Action": ["iam:GetRole", "iam:ListRoles"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "UseOwnTablesData",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
+        "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:DescribeTable"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-documents",
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-documents/index/*",
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-equipment",
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-equipment/index/*",
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-onboarding-stages",
+        "arn:aws:dynamodb:us-east-1:*:table/hrms-dev-onboarding-stages/index/*"
+      ]
+    },
+    {
+      "Sid": "ListTables",
+      "Effect": "Allow",
+      "Action": "dynamodb:ListTables",
+      "Resource": "*"
+    },
+    {
+      "Sid": "HrNotificationTopic",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": "arn:aws:sns:us-east-1:*:hrms-dev-documents-*"
+    },
+    {
+      "Sid": "ListTopics",
+      "Effect": "Allow",
+      "Action": "sns:ListTopics",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SendEmails",
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail", "ses:SendRawEmail", "ses:ListIdentities",
+        "ses:GetIdentityVerificationAttributes"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ResumeWorkflowAndLookAtRuns",
+      "Effect": "Allow",
+      "Action": [
+        "states:SendTaskSuccess", "states:SendTaskFailure", "states:SendTaskHeartbeat",
+        "states:DescribeExecution", "states:ListExecutions", "states:ListStateMachines"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "FindLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOwnLogs",
+      "Effect": "Allow",
+      "Action": ["logs:DescribeLogStreams", "logs:GetLogEvents", "logs:FilterLogEvents"],
+      "Resource": [
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/hrms-dev-*",
+        "arn:aws:logs:us-east-1:*:log-group:/aws/lambda/hrms-dev-*:*"
+      ]
+    }
+  ]
+}
