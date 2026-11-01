@@ -1,4 +1,5 @@
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Fingerprint, KeyRound, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { completeSignIn, finishPasswordReset, isAuthConfigured, signIn, startPasswordReset } from "./auth";
 
@@ -14,7 +15,7 @@ const challengeCopy: Record<string, { title: string; description: string; placeh
   CONFIRM_SIGN_IN_WITH_PASSWORD: { title: "Confirm your password", description: "Enter your password to complete this sign-in step.", placeholder: "Password", type: "password" },
   CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE: { title: "Additional verification", description: "Complete the additional verification step to continue.", placeholder: "Verification response" },
 };
-export function AuthGate({ workspace, title, description, onAuthenticated }: Props) {
+export function AuthGate({ workspace, title, description, error: externalError, onAuthenticated }: Props) {
   const [mode,setMode]=useState<Mode>("signin");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
@@ -73,7 +74,7 @@ export function AuthGate({ workspace, title, description, onAuthenticated }: Pro
     <div className="auth-eyebrow"><ShieldCheck size={15}/> SECURE WORKSPACE · {workspace.toUpperCase()}</div>
     <div className="auth-intro"><span className="auth-orbit"><Sparkles size={16}/></span><h1>{mode==="signin"?title:mode==="forgot"?"Reset your password":mode==="reset"?"Check your inbox":challengeDetails.title}</h1>
     <p className="auth-description">{mode==="signin"?description:mode==="forgot"?"We’ll send a secure reset code to the email associated with your account.":mode==="reset"?"Enter the code from your email and choose a new password.":challengeDetails.description}</p></div>
-    {error&&<div className="auth-error" role="alert">{error}</div>}
+    {(error||externalError)&&<div className="auth-error" role="alert">{error||externalError}</div>}
     {notice&&<div className="auth-notice" role="status">{notice}</div>}
     {!configured&&<div className="auth-config" role="status">Cognito settings are missing. Add the user pool ID and public app-client ID to this app’s environment.</div>}
     {mode==="signin"&&<form className="auth-form" onSubmit={submitSignIn}>
