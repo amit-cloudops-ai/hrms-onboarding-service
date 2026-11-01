@@ -57,9 +57,17 @@ export async function finishPasswordReset(username: string, confirmationCode: st
   });
 }
 
-export async function getIdToken(): Promise<string | null> {
+let forcedRefreshPromise: Promise<string | null> | null = null;
+
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
   if (!isAuthConfigured()) return null;
   try {
+    if (forceRefresh) {
+      forcedRefreshPromise ??= fetchAuthSession({ forceRefresh: true })
+        .then(session => session.tokens?.idToken?.toString() || null)
+        .catch(() => null);
+      return await forcedRefreshPromise;
+    }
     const session = await fetchAuthSession();
     return session.tokens?.idToken?.toString() || null;
   } catch {
