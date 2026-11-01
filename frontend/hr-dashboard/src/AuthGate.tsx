@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Fingerprint, KeyRound, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
-import { completeSignIn, finishPasswordReset, isAuthConfigured, signIn, startPasswordReset } from "./auth";
+import { completeSignIn, finishPasswordReset, isAuthConfigured, signIn, signOut, startPasswordReset } from "./auth";
 
 type Props = { workspace: string; title: string; description: string; error?: string; onAuthenticated: () => void };
 type Mode = "signin" | "challenge" | "forgot" | "reset";
@@ -112,6 +112,7 @@ export function AuthGate({ workspace, title, description, error: externalError, 
       <button className="auth-primary" disabled={busy}>{busy?"Verifying…":<>Continue securely <ArrowRight size={17}/></>}</button>
       <button type="button" className="auth-back" onClick={()=>{setMode("signin");setChallenge("");setError("");setNotice("");}}>Cancel and return to sign in</button>
     </form>}
+    <button type="button" className="auth-back" onClick={()=>void signOut()}>Clear saved sign-in on this browser</button>
     <div className="auth-security"><LockKeyhole size={15}/><span>Protected by Amazon Cognito Secure Remote Password authentication. API permissions are independently enforced by the backend.</span></div>
     <div className="auth-footnote">NORTHSTAR <span>·</span> {workspace.toUpperCase()}</div>
   </section></main>;
