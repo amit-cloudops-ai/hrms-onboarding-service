@@ -1,9 +1,10 @@
 # Solo integration runbook — WP1/WP2/WP3/WP4/WP5
 
-This runbook is for a separately approved test in Amit's AWS account. **Nothing in this document has been deployed by these code changes.** The unit tests and SAM validation are offline. Do not run deployment commands until the AWS account, region, existing table names, Cognito pool/client, and expected costs have been checked.
+This runbook is for a separately approved development deployment in Amit's AWS account. **The code and templates have not been deployed by these changes.** Unit tests and SAM validation are offline. The deployment creates billable AWS resources. Review the AWS Pricing Calculator and set an AWS Budget before proceeding.
 
 ## Integration shape
 
+- The foundation stack creates the DynamoDB tables and Cognito user pool/client/groups.
 - WP1 creates the employee record and Cognito identity, persisting immutable Cognito `sub`.
 - WP5 authenticates requests through API Gateway's Cognito JWT authorizer and enforces HR-admin/self-service authorization.
 - WP2 owns the four-stage Step Functions state machine and persists each active task token.
@@ -13,55 +14,73 @@ This runbook is for a separately approved test in Amit's AWS account. **Nothing 
 ## Pre-deployment checks
 
 1. Confirm AWS CLI is authenticated to the intended account: `aws sts get-caller-identity`.
-2. Confirm the region is `us-east-1` and the existing DynamoDB tables (employees, stages, documents, and equipment) match `docs/data-model.md`.
-3. Confirm the existing Cognito user pool, app client, and `hr-admins` group.
-4. Confirm the chosen S3 upload origin (exact portal origin) and SNS notification subscriptions.
-5. Confirm a real provisioning adapter is not required for the first test. Use simulated IT provisioning for the first pass.
-6. Check current AWS pricing and set a budget alert. These templates create Lambda functions, a Standard Step Functions state machine, SNS topics, and a versioned S3 bucket. Do not deploy duplicate stacks if equivalent resources already exist.
+2. Confirm the target region is `us-east-1`: `aws configure get region`.
+3. Confirm the six-region inventory and any remaining billable resources have been reviewed. Cost Explorer data can lag.
+4. Confirm the Cognito domain prefix is globally unique for the selected region.
+5. Decide the exact browser origins. For local Vite development, the portal is `http://localhost:5173` and the dashboard is `http://localhost:5174`. For hosted apps, use their exact HTTPS origins instead.
+6. Confirm a real provisioning adapter is not required for the first test. Use simulated IT provisioning.
+7. Review the CloudFormation change set and resource list before approving each stack. Do not deploy duplicate stacks if equivalent resources already exist.
 
 ## Deploy order
 
-The order matters because the API and workflow refer to the stage handler, and the document service calls the stage handler.
+**Deploy the foundation first.** All service stacks depend on its DynamoDB tables and Cognito user pool. Deploying the service stacks before the foundation causes missing-resource or permission failures.
 
-### 1. WP4 stage handler
+### 1. Shared foundation
+
+Choose a unique lowercase Cognito domain prefix. The callback/logout defaults are suitable only for local development.
+
+```bash
+sam build --template-file infra/template.yaml
+sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-foundation --capabilities CAPABILITY_IAM --parameter-overrides Environment=dev CognitoDomainPrefix=REPLACE-WITH-UNIQUE-PREFIX CognitoCallbackUrls=http://localhost:5173/,http://localhost:5174/ CognitoLogoutUrls=http://localhost:5173/,http://localhost:5174/
+```
+
+Record these outputs: `EmployeesTableName`, `OnboardingStagesTableName`, `DocumentsTableName`, `EquipmentTableName`, `UserPoolId`, `UserPoolClientId`, and `CognitoHostedUiDomain`.
+
+Create the initial HR administrator in the new user pool and add that user to the `hr-admins` group before testing admin routes. Do not put passwords or tokens in source control.
+
+### 2. WP4 stage handler
 
 ```bash
 sam build --template-file services/stages/template.yaml
 sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-stages --capabilities CAPABILITY_IAM --parameter-overrides SimulationMode=true
 ```
 
-Record the `StagesFunctionName` and `StageNotificationTopicArn` outputs. The first output is passed to WP2, WP3, and WP5. Subscribe the authorized manager/HR notification endpoint to the topic if required.
+Record `StagesFunctionName` and `StageNotificationTopicArn`. The function name is passed to WP2, WP3, and WP5. Subscribe only an authorized HR notification endpoint if notifications are required.
 
-### 2. WP3 document service
+### 3. WP3 document service
 
-Replace the origin with the exact browser origin that will upload files.
+For local browser testing, use the portal origin `http://localhost:5173`. Replace it with the exact deployed portal origin when hosting the frontend.
 
 ```bash
 sam build --template-file services/documents/template.yaml
-sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-documents --capabilities CAPABILITY_IAM --parameter-overrides StagesFunctionName=hrms-dev-stages UploadAllowedOrigin=https://YOUR-PORTAL-ORIGIN
+sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-documents --capabilities CAPABILITY_IAM --parameter-overrides StagesFunctionName=hrms-dev-stages UploadAllowedOrigin=http://localhost:5173
 ```
 
-Record `DocumentsFunctionName`, `DocumentsBucketName`, and `HrDocumentNotificationsTopicArn`. Subscribe only an authorized HR endpoint to the notification topic. Confirm the bucket's public-access block, encryption, versioning, and CORS origin in the console.
+Record `DocumentsFunctionName`, `DocumentsBucketName`, and `HrDocumentNotificationsTopicArn`. Confirm the bucket's public-access block, encryption, versioning, and CORS origin. Subscribe only an authorized HR endpoint to the notification topic.
 
-### 3. WP2 workflow
+### 4. WP2 workflow
 
 ```bash
 sam build --template-file services/workflow/template.yaml
 sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-workflow --capabilities CAPABILITY_IAM --parameter-overrides StagesFunctionName=hrms-dev-stages
 ```
 
-Record the `StateMachineArn` output. Confirm the workflow role can invoke `hrms-dev-stages` and the stage role can call `states:SendTaskSuccess`.
+Record `StateMachineArn`. Confirm the workflow role can invoke `hrms-dev-stages` and the stage role can call `states:SendTaskSuccess`.
 
-### 4. WP5 API
+### 5. WP5 API
 
-Use the real existing Cognito pool/client IDs and the State Machine ARN output from WP2.
+Use the `UserPoolId` and `UserPoolClientId` outputs from the foundation and `StateMachineArn` from WP2.
 
 ```bash
 sam build --template-file services/api/template.yaml
-sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-api --capabilities CAPABILITY_IAM --parameter-overrides CognitoUserPoolId=YOUR_POOL_ID CognitoAppClientId=YOUR_APP_CLIENT_ID StateMachineArn=YOUR_STATE_MACHINE_ARN DocumentsFunctionName=hrms-dev-documents StagesFunctionName=hrms-dev-stages
+sam deploy --guided --template-file .aws-sam/build/template.yaml --stack-name hrms-dev-api --capabilities CAPABILITY_IAM --parameter-overrides CognitoUserPoolId=REPLACE-WITH-UserPoolId CognitoAppClientId=REPLACE-WITH-UserPoolClientId StateMachineArn=REPLACE-WITH-StateMachineArn DocumentsFunctionName=hrms-dev-documents StagesFunctionName=hrms-dev-stages PortalOrigin=http://localhost:5173 DashboardOrigin=http://localhost:5174
 ```
 
 Record `ApiEndpoint`. Do not put real tokens, temporary passwords, document contents, or credentials into GitHub issues or logs.
+
+## Frontend configuration
+
+Configure both Vite apps to use the deployed `ApiEndpoint` and the foundation Cognito values. Use the exact callback/logout URLs registered in Cognito. Do not commit secrets; the Cognito web client is public and must not contain a client secret.
 
 ## End-to-end acceptance checklist
 
@@ -78,10 +97,10 @@ Use a real HR-admin JWT and a separate employee account. The employee token's Co
 
 ## Cleanup and cost control
 
-After testing, remove test employee records and test documents only after confirming the data is disposable. The documents bucket is versioned; remove current objects **and object versions/delete markers** before deleting the stack. Then delete stacks in reverse dependency order: `hrms-dev-api`, `hrms-dev-workflow`, `hrms-dev-documents`, `hrms-dev-stages`. Before stack deletion, inspect each stack's resources and retain any resource that contains data you need. Confirm there are no remaining test Step Functions executions, S3 objects/versions, or SNS subscriptions you intended to remove.
+After testing, remove test employee records and test documents only after confirming the data is disposable. The WP3 documents bucket is versioned; remove current objects, object versions, and delete markers before deleting its stack. Delete stacks in reverse dependency order only after reviewing their resources and retaining any data you need: `hrms-dev-api`, `hrms-dev-workflow`, `hrms-dev-documents`, `hrms-dev-stages`, then `hrms-dev-foundation`.
 
-Do not run `sam deploy` or stack deletion automatically. Review the change set and account identity first.
+Do not run stack deletion automatically. Confirm there are no remaining test Step Functions executions, S3 objects/versions, or SNS subscriptions you intend to retain.
 
 ## CI verification
 
-The repository workflow `.github/workflows/unit-tests.yml` validates all four SAM templates and runs the WP1/WP2/WP3/WP4/WP5 offline regression suites on `v1-solo` and pull requests targeting `v1-solo`. These checks use mocks and do not deploy or call live AWS resources.
+The repository workflow `.github/workflows/unit-tests.yml` validates the SAM templates and runs the WP1/WP2/WP3/WP4/WP5 offline regression suites on `v1-solo` and pull requests targeting `v1-solo`. These checks use mocks and do not deploy or call live AWS resources.
