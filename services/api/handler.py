@@ -88,11 +88,12 @@ def _log_admin_denial(claims: dict[str, Any]) -> None:
             normalized = [part.strip() for part in normalized.split(",") if part.strip()]
     logger.warning(
         "HR admin authorization denied: groups_claim_present=%s groups_claim_type=%s "
-        "groups_claim_is_list=%s configured_group_match=%s token_use=%s",
+        "groups_claim_is_list=%s configured_group_match=%s group_names=%s token_use=%s",
         "cognito:groups" in claims,
         type(groups).__name__ if groups is not None else "missing",
         isinstance(normalized, list),
         isinstance(normalized, list) and configured in normalized,
+        [str(group)[:100] for group in normalized[:20]] if isinstance(normalized, list) else [],
         claims.get("token_use", "missing"),
     )
 
