@@ -10,7 +10,7 @@ Security and cost defaults:
 
 - DynamoDB uses on-demand billing; point-in-time recovery is disabled by default and can be enabled after reviewing its cost.
 - The S3 bucket blocks public access, enforces TLS, enables S3-managed encryption and versioning, and expires noncurrent object versions after 30 days.
-- The Cognito web client has no client secret. Access and ID tokens are short-lived.
+- The Cognito web client has no client secret and is configured for OAuth authorization-code flow with PKCE, `openid email profile` scopes, and explicit callback/logout URL allowlists. The template creates the managed-login domain from a globally unique prefix. Access and ID tokens are short-lived.
 - No API, Lambda functions, SES sender identities, or Step Functions state machine are created yet. Those belong in later tested increments.
 
 ## Prerequisites
@@ -51,6 +51,9 @@ Use these values when prompted:
 - Region: `us-east-1`
 - Environment: `dev`
 - EnablePointInTimeRecovery: `false`
+- CognitoDomainPrefix: a globally unique lowercase prefix (for example, `hrms-dev-<your-unique-suffix>`; verify availability before deployment)
+- CognitoCallbackUrls: `http://localhost:5173/,http://localhost:5174/` for initial local testing; replace with exact HTTPS production URLs before production use
+- CognitoLogoutUrls: same allowlist as callback URLs
 - Confirm changes before deploy: `Y`
 - Allow SAM CLI IAM role creation: `N` (the foundation currently declares no Lambda functions or IAM roles)
 - Save arguments to configuration file: optional
