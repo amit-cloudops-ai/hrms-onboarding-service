@@ -56,7 +56,17 @@ export function AuthGate({ workspace, title, description, error: externalError, 
   async function submitChallenge(event:FormEvent){
     event.preventDefault();setError("");setNotice("");setBusy(true);
     try{
-      const response=challenge==="CONTINUE_SIGN_IN_WITH_MFA_SELECTION"||challenge==="CONTINUE_SIGN_IN_WITH_MFA_SETUP_SELECTION"?mfaChoice:challenge==="CONTINUE_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"?newPassword:answer;
+      const formData = new FormData(event.currentTarget);
+      const enteredValue = String(formData.get("challengeResponse") ?? "");
+      const response = challenge==="CONTINUE_SIGN_IN_WITH_MFA_SELECTION"||challenge==="CONTINUE_SIGN_IN_WITH_MFA_SETUP_SELECTION"
+        ? mfaChoice
+        : challenge==="CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
+          ? (enteredValue || newPassword)
+          : (enteredValue || answer);
+      if (!response) {
+        setError(challenge==="CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" ? "Enter a new password to continue." : "Enter the requested verification response.");
+        return;
+      }
       const result=await completeSignIn(response);await applyStep(result.nextStep.signInStep,result.nextStep);
     }catch(e){setError(e instanceof Error?e.message:"Verification failed. Check the code and try again.");}
     finally{setBusy(false);}
