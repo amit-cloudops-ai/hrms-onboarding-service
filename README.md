@@ -27,8 +27,13 @@ This is the identity spine of the HRMS. It creates the canonical employee record
 
 ## Start here
 1. Read `docs/team-brief.md` and `docs/api-contract.md`.
-2. Pick a work package from the Issues tab.
-3. Follow `CONTRIBUTING.md`.
+2. For the full solo implementation history, deployed AWS inventory, exact deployment commands, Console walkthrough, local website setup and remaining acceptance tests, read [Solo implementation and AWS deployment record](docs/solo-implementation-and-aws-deployment-record.md).
+3. For the current component handoff, read `docs/implementation-status.md`.
+4. Follow `CONTRIBUTING.md` for repository workflow.
+
+## Deployment status
+
+The five development backend stacks (foundation, stages, documents, workflow and API) are deployed in `us-east-1` and were confirmed `CREATE_COMPLETE` on 1 November 2026. The frontends have passed production builds, but live Cognito sign-in and the full end-to-end onboarding journey still require verification. This is not a production release.
 
 ## Rules in one line
 No secrets in Git. No direct pushes to `main`. Stay in your folder. Ask before changing the contract.
