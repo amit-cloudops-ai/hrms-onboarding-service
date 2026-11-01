@@ -1,6 +1,6 @@
 # Solo integration runbook — WP1/WP2/WP3/WP4/WP5
 
-This runbook is for a separately approved development deployment in Amit's AWS account. **The code and templates have not been deployed by these changes.** Unit tests and SAM validation are offline. The deployment creates billable AWS resources. Review the AWS Pricing Calculator and set an AWS Budget before proceeding.
+This runbook describes the development integration sequence. **The five backend stacks have now been deployed in us-east-1 and each returned CREATE_COMPLETE.** Live end-to-end application acceptance is still pending, and deployed resources can incur charges. See [the solo implementation and AWS deployment record](solo-implementation-and-aws-deployment-record.md) for the exact executed commands, confirmed outputs, AWS Console walkthrough, frontend setup, remaining tests and cleanup procedure. Review AWS billing and set a budget before extended testing.
 
 ## Integration shape
 
