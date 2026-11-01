@@ -28,7 +28,8 @@ This is the identity spine of the HRMS. It creates the canonical employee record
 ## Start here
 1. Read `docs/team-brief.md` and `docs/api-contract.md`.
 2. For the full solo implementation history, deployed AWS inventory, exact deployment commands, Console walkthrough, local website setup and remaining acceptance tests, read [Solo implementation and AWS deployment record](docs/solo-implementation-and-aws-deployment-record.md).
-3. For the current component handoff, read `docs/implementation-status.md`.
+3. For the Northstar custom Cognito sign-in implementation and acceptance gates, read [Northstar custom authentication](docs/northstar-custom-auth.md).
+4. For the current component handoff, read `docs/implementation-status.md`.
 4. Follow `CONTRIBUTING.md` for repository workflow.
 
 ## Deployment status
