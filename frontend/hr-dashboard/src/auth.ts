@@ -20,7 +20,7 @@ if (USER_POOL_ID && CLIENT_ID) {
       Cognito: {
         userPoolId: USER_POOL_ID,
         userPoolClientId: CLIENT_ID,
-        loginWith: { username: true },
+        loginWith: { email: true },
       },
     },
   });
