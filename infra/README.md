@@ -4,7 +4,7 @@ This folder contains the AWS SAM/CloudFormation infrastructure for the solo impl
 
 ## Foundation template
 
-`template.yaml` creates the four DynamoDB tables in `docs/data-model.md`, a private encrypted S3 document bucket, an SNS topic for HR notifications, a Cognito user pool, and the `HRAdmin` / `Employee` groups.
+`template.yaml` creates the four DynamoDB tables in `docs/data-model.md`, a private encrypted S3 document bucket, an SNS topic for HR notifications, a Cognito user pool, and the `hr-admins` / `Employee` groups.
 
 Security and cost defaults:
 
