@@ -209,7 +209,7 @@ Resources:
   HrAdminGroup:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
-      GroupName: HRAdmin
+      GroupName: hr-admins
       Description: HR administrators allowed to manage onboarding records.
       UserPoolId: !Ref UserPool
 
