@@ -34,7 +34,7 @@ class ApiResponseTests(unittest.TestCase):
 
     def test_employee_can_resolve_current_profile_by_immutable_subject(self):
         employees = Mock()
-        employees.scan.return_value = {"Items": [{
+        employees.query.return_value = {"Items": [{
             "employee_id": "emp-current",
             "full_name": "Test Employee",
             "email": "employee@example.com",
@@ -52,11 +52,11 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(payload["progress"]["employee_id"], "emp-current")
         self.assertNotIn("cognito_sub", response["body"])
         self.assertNotIn("private-execution-arn", response["body"])
-        employees.scan.assert_called_once()
+        employees.query.assert_called_once()
 
     def test_current_employee_endpoint_returns_not_found_for_unlinked_cognito_subject(self):
         employees = Mock()
-        employees.scan.return_value = {"Items": []}
+        employees.query.return_value = {"Items": []}
         with patch.object(handler, "_employees_table", return_value=employees):
             response = handler.lambda_handler(event("GET", "/employees/me"), None)
         self.assertEqual(response["statusCode"], 404)
@@ -64,7 +64,7 @@ class ApiResponseTests(unittest.TestCase):
 
     def test_current_employee_endpoint_rejects_ambiguous_subject_linkage(self):
         employees = Mock()
-        employees.scan.return_value = {"Items": [
+        employees.query.return_value = {"Items": [
             {"employee_id": "emp-1", "cognito_sub": "cognito-sub-123"},
             {"employee_id": "emp-2", "cognito_sub": "cognito-sub-123"},
         ]}
@@ -140,7 +140,7 @@ class ApiResponseTests(unittest.TestCase):
 
     def test_employee_list_does_not_leak_internal_identity_or_execution_fields(self):
         employees = Mock()
-        employees.scan.return_value = {"Items": [{
+        employees.query.return_value = {"Items": [{
             "employee_id": "emp-1",
             "email": "employee@example.com",
             "cognito_sub": "internal-sub",
