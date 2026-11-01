@@ -47,13 +47,13 @@ export function AuthGate({ workspace, title, description, error: externalError, 
     }
     setMode("challenge");
   }
-  async function submitSignIn(event:FormEvent){
+  async function submitSignIn(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError("");setNotice("");setBusy(true);
     try{const result=await signIn(email,password);await applyStep(result.nextStep.signInStep,result.nextStep);}
     catch(e){setError(e instanceof Error?e.message:"Sign-in failed. Check your details and try again.");}
     finally{setBusy(false);}
   }
-  async function submitChallenge(event:FormEvent){
+  async function submitChallenge(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError("");setNotice("");setBusy(true);
     try{
       const formData = new FormData(event.currentTarget);
@@ -71,7 +71,7 @@ export function AuthGate({ workspace, title, description, error: externalError, 
     }catch(e){setError(e instanceof Error?e.message:"Verification failed. Check the code and try again.");}
     finally{setBusy(false);}
   }
-  async function submitReset(event:FormEvent){
+  async function submitReset(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError("");setNotice("");setBusy(true);
     try{await finishPasswordReset(email,code,newPassword);setMode("signin");setPassword("");setCode("");setNewPassword("");setNotice("Password updated. Sign in with your new password.");}
     catch(e){setError(e instanceof Error?e.message:"Password reset failed. Check the code and try again.");}
