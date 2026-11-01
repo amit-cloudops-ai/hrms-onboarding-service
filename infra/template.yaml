@@ -48,6 +48,8 @@ Resources:
           AttributeType: S
         - AttributeName: status
           AttributeType: S
+        - AttributeName: cognito_sub
+          AttributeType: S
       KeySchema:
         - AttributeName: employee_id
           KeyType: HASH
@@ -55,6 +57,12 @@ Resources:
         - IndexName: status-index
           KeySchema:
             - AttributeName: status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: cognito-sub-index
+          KeySchema:
+            - AttributeName: cognito_sub
               KeyType: HASH
           Projection:
             ProjectionType: ALL
@@ -133,64 +141,6 @@ Resources:
         PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
       SSESpecification:
         SSEEnabled: true
-      Tags:
-        - Key: Project
-          Value: hrms-onboarding-service
-        - Key: Environment
-          Value: !Ref Environment
-
-  DocumentsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'hrms-${Environment}-documents-${AWS::AccountId}-${AWS::Region}'
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        IgnorePublicAcls: true
-        BlockPublicPolicy: true
-        RestrictPublicBuckets: true
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: ExpireNoncurrentDocumentVersions
-            Status: Enabled
-            NoncurrentVersionExpiration:
-              NoncurrentDays: 30
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      Tags:
-        - Key: Project
-          Value: hrms-onboarding-service
-        - Key: Environment
-          Value: !Ref Environment
-
-  DocumentsBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref DocumentsBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: DenyInsecureTransport
-            Effect: Deny
-            Principal: '*'
-            Action: 's3:*'
-            Resource:
-              - !GetAtt DocumentsBucket.Arn
-              - !Sub '${DocumentsBucket.Arn}/*'
-            Condition:
-              Bool:
-                aws:SecureTransport: 'false'
-
-  HrNotificationsTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: !Sub 'hrms-${Environment}-hr-notifications'
       Tags:
         - Key: Project
           Value: hrms-onboarding-service
@@ -284,12 +234,6 @@ Outputs:
   EquipmentTableName:
     Description: DynamoDB equipment inventory table.
     Value: !Ref EquipmentTable
-  DocumentsBucketName:
-    Description: Private S3 bucket for employee documents.
-    Value: !Ref DocumentsBucket
-  HrNotificationsTopicArn:
-    Description: SNS topic for HR notifications.
-    Value: !Ref HrNotificationsTopic
   UserPoolId:
     Description: Cognito user pool ID.
     Value: !Ref UserPool
