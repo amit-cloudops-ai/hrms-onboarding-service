@@ -91,7 +91,7 @@ Status: **Cognito/API client wiring implemented; production build passed; local 
 Status: **Cognito/API client wiring implemented; production build passed; local live configuration and admin acceptance pending**
 
 - Dashboard with pipeline metrics, stage analytics, search/filter, employee details, CSV export, refresh, notifications and add-new-hire workflow.
-- Uses Cognito OAuth PKCE/session module and bearer-token API requests.
+- Uses the same Northstar in-app Cognito SRP sign-in and session-scoped Amplify token storage as the employee portal; API requests continue to use Cognito bearer tokens.
 - Live employee data is fetched from `GET /employees`; live mode starts empty rather than displaying demo employees.
 - Create form sends `full_name`, `email`, `role`, `department`, `joining_date` and `employment_type`.
 - Backend `hr-admins` group membership is the authorization boundary.
@@ -116,7 +116,7 @@ Status: **Cognito/API client wiring implemented; production build passed; local 
 
 ## Next acceptance gates
 
-- [ ] Configure both local frontend environment files and verify Cognito hosted login.
+- [ ] Configure both local frontend environment files and verify the Northstar in-app Cognito SRP sign-in.
 - [ ] Create/verify HR admin membership in `hr-admins`.
 - [ ] Verify anonymous 401, HR-admin access and employee self-only access.
 - [ ] Create a disposable employee and verify Cognito identity, DynamoDB record and Step Functions execution.
