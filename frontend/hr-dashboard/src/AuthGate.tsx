@@ -53,7 +53,7 @@ export function AuthGate({ workspace, title, description, error: externalError, 
     catch(e){setError(e instanceof Error?e.message:"Sign-in failed. Check your details and try again.");}
     finally{setBusy(false);}
   }
-  async function submitChallenge(event:FormEvent){
+  async function submitChallenge(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError("");setNotice("");setBusy(true);
     try{
       const formData = new FormData(event.currentTarget);
