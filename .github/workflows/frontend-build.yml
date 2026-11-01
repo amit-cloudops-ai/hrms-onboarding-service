@@ -6,6 +6,12 @@ on:
       - 'frontend/portal/**'
       - 'frontend/hr-dashboard/**'
       - '.github/workflows/frontend-build.yml'
+  pull_request:
+    branches: [v1-solo]
+    paths:
+      - 'frontend/portal/**'
+      - 'frontend/hr-dashboard/**'
+      - '.github/workflows/frontend-build.yml'
   workflow_dispatch:
 jobs:
   build-frontends:
