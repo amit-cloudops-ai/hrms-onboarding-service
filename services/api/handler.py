@@ -64,36 +64,50 @@ def _claims(event: dict[str, Any]) -> dict[str, Any]:
     return claims if isinstance(claims, dict) else {}
 
 
-def _is_admin(claims: dict[str, Any]) -> bool:
-    configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins")
+def _group_names(claims: dict[str, Any]) -> list[str]:
+    """Normalize Cognito group claims across JSON and bracketed string formats."""
     groups = claims.get("cognito:groups", [])
-    if isinstance(groups, str):
-        try:
-            decoded = json.loads(groups)
-            groups = decoded if isinstance(decoded, list) else [groups]
-        except json.JSONDecodeError:
-            groups = [part.strip() for part in groups.split(",") if part.strip()]
-    return isinstance(groups, list) and configured in groups
+    if isinstance(groups, list):
+        return [item.strip() for item in groups if isinstance(item, str) and item.strip()]
+    if not isinstance(groups, str):
+        return []
+    value = groups.strip()
+    if not value:
+        return []
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        decoded = None
+    if isinstance(decoded, list):
+        return [item.strip() for item in decoded if isinstance(item, str) and item.strip()]
+    # Some Cognito/API integrations expose a single group as "[hr-admins]"
+    # rather than a JSON array. Remove only the outer brackets and quotes.
+    if value.startswith("[") and value.endswith("]"):
+        value = value[1:-1].strip()
+    return [
+        part.strip().strip("\\"'").strip()
+        for part in value.split(",")
+        if part.strip().strip("\\"'").strip()
+    ]
+
+
+def _is_admin(claims: dict[str, Any]) -> bool:
+    configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins").strip()
+    return configured in _group_names(claims)
+
 
 def _log_admin_denial(claims: dict[str, Any]) -> None:
     """Log safe claim diagnostics without recording tokens or personal data."""
     groups = claims.get("cognito:groups")
-    configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins")
-    normalized = groups
-    if isinstance(normalized, str):
-        try:
-            decoded = json.loads(normalized)
-            normalized = decoded if isinstance(decoded, list) else [normalized]
-        except json.JSONDecodeError:
-            normalized = [part.strip() for part in normalized.split(",") if part.strip()]
+    configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins").strip()
+    names = _group_names(claims)
     logger.warning(
         "HR admin authorization denied: groups_claim_present=%s groups_claim_type=%s "
-        "groups_claim_is_list=%s configured_group_match=%s group_names=%s token_use=%s",
+        "configured_group_match=%s group_names=%s token_use=%s",
         "cognito:groups" in claims,
         type(groups).__name__ if groups is not None else "missing",
-        isinstance(normalized, list),
-        isinstance(normalized, list) and configured in normalized,
-        [str(group)[:100] for group in normalized[:20]] if isinstance(normalized, list) else [],
+        configured in names,
+        names[:20],
         claims.get("token_use", "missing"),
     )
 
