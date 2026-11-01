@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >-
   Smart Employee Onboarding & Identity Service - shared development foundation.
-  Creates private document storage, DynamoDB tables, Cognito groups, and an HR SNS topic.
+  Creates DynamoDB tables and Cognito identity resources for the development environment.
 
 Parameters:
   Environment:
@@ -162,7 +162,8 @@ Resources:
           RequireUppercase: true
           RequireNumbers: true
           RequireSymbols: true
-      MfaConfiguration: OPTIONAL
+      # SMS MFA is not configured in this development stack. Enable TOTP MFA separately before production.
+      MfaConfiguration: 'OFF'
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
