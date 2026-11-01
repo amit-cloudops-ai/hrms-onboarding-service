@@ -57,17 +57,10 @@ export async function finishPasswordReset(username: string, confirmationCode: st
   });
 }
 
-let forcedRefreshPromise: Promise<string | null> | null = null;
-
-export async function getIdToken(forceRefresh = false): Promise<string | null> {
+export async function getIdToken(): Promise<string | null> {
   if (!isAuthConfigured()) return null;
   try {
-    if (forceRefresh) {
-      forcedRefreshPromise ??= fetchAuthSession({ forceRefresh: true })
-        .then(session => session.tokens?.idToken?.toString() || null)
-        .catch(() => null);
-      return await forcedRefreshPromise;
-    }
+    // Amplify refreshes expired tokens automatically when a valid refresh token exists.
     const session = await fetchAuthSession();
     return session.tokens?.idToken?.toString() || null;
   } catch {
