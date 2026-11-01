@@ -43,7 +43,7 @@ The first foundation deployment failed because optional MFA was configured witho
 The frontend CI build identified missing Vite ImportMeta.env declarations. src/vite-env.d.ts was added to both frontend applications and a frontend build workflow was added. The recorded GitHub Actions build run passed both apps.
 
 ### Frontend/backend contract alignment
-The dashboard create-employee payload was aligned to the backend schema. GET /employees/me was added for employee self-service. API CORS was parameterized for portal :5173 and dashboard :5174. Both apps use Cognito authorization-code flow with PKCE and bearer-token API requests. Live browser authentication/CORS is not yet verified.
+The dashboard create-employee payload was aligned to the backend schema. GET /employees/me was added for employee self-service. API CORS was parameterized for portal :5173 and dashboard :5174. Both apps now use the Northstar in-app Cognito SRP sign-in through Amplify Auth v6, with session-scoped token storage and bearer-token API requests. The existing app client already permits SRP and refresh-token auth, so this UI change does not require a CloudFormation update. Real browser authentication/API behavior still requires acceptance testing. See [Northstar custom authentication](northstar-custom-auth.md).
 
 ### SAM dependency notice
 SAM printed: "requirements.txt file not found. Continuing the build without dependencies." The builds still succeeded and copied source. This means SAM did not install a requirements file for those functions. Verify deployed imports in CloudWatch; add/package any third-party dependencies required. Do not treat the successful build as proof of runtime import success.
@@ -247,11 +247,8 @@ Create frontend/portal/.env.local:
 ~~~
 VITE_API_BASE_URL=https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com
 VITE_DEMO_MODE=false
-VITE_COGNITO_DOMAIN=https://amit-hrms-dev-20261101.auth.us-east-1.amazoncognito.com
+VITE_COGNITO_USER_POOL_ID=us-east-1_UHdj6I89K
 VITE_COGNITO_CLIENT_ID=1p5860pgdk2jc0nqgo1217sh8
-VITE_AUTH_REDIRECT_URI=http://localhost:5173/
-VITE_LOGOUT_REDIRECT_URI=http://localhost:5173/
-VITE_COGNITO_SCOPES=openid email profile
 ~~~
 
 Create frontend/hr-dashboard/.env.local:
@@ -259,11 +256,8 @@ Create frontend/hr-dashboard/.env.local:
 ~~~
 VITE_API_BASE_URL=https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com
 VITE_DEMO_MODE=false
-VITE_COGNITO_DOMAIN=https://amit-hrms-dev-20261101.auth.us-east-1.amazoncognito.com
+VITE_COGNITO_USER_POOL_ID=us-east-1_UHdj6I89K
 VITE_COGNITO_CLIENT_ID=1p5860pgdk2jc0nqgo1217sh8
-VITE_AUTH_REDIRECT_URI=http://localhost:5174/
-VITE_LOGOUT_REDIRECT_URI=http://localhost:5174/
-VITE_COGNITO_SCOPES=openid email profile
 ~~~
 
 Do not commit .env.local files.
@@ -296,7 +290,7 @@ Use the HR admin Cognito account for dashboard testing and a separate employee a
 
 Do not call the project complete until these pass against real AWS services:
 
-1. Cognito sign-in, token refresh and sign-out work in both applications.
+1. Northstar in-app Cognito SRP sign-in, token refresh and sign-out work in both applications.
 2. Anonymous requests are rejected. Employee cannot list/create or read another employee's data. Only hr-admins can list/create employees and complete manager intro.
 3. HR admin creates a disposable test employee. Confirm employee record, Cognito identity and Step Functions execution are created.
 4. Simulated IT provisioning completes and records expected equipment assignment.
@@ -356,7 +350,7 @@ aws cloudformation wait stack-delete-complete --stack-name hrms-dev-foundation -
 - [x] WP3 documents deployed.
 - [x] WP2 workflow deployed.
 - [x] WP5 API deployed.
-- [ ] Create local frontend environment files and verify Cognito login.
+- [ ] Create local frontend environment files and verify Northstar in-app Cognito SRP login.
 - [ ] Verify HR admin membership in hr-admins.
 - [ ] Complete live authorization checks.
 - [ ] Complete live employee creation and workflow execution.
