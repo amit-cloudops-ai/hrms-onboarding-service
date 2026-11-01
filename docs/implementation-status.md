@@ -20,7 +20,7 @@ The API endpoint is `https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com`.
 
 **Boundary:** stack creation is confirmed; live end-to-end application behavior is not yet confirmed. Frontend environment setup, Cognito login, admin/employee authorization, employee creation, S3 upload validation, policy sign-off, manager completion, notification delivery and failure-path testing remain.
 
-For the complete implementation history, problems/fixes, AWS resource inventory, deployment commands, Console walkthrough, local frontend configuration, acceptance checklist and cleanup procedure, see [Solo implementation and AWS deployment record](solo-implementation-and-aws-deployment-record.md).
+For the complete implementation history, problems/fixes, AWS resource inventory, deployment commands, Console walkthrough, local frontend configuration, acceptance checklist and cleanup procedure, see [Solo implementation and AWS deployment record](solo-implementation-and-aws-deployment-record.md). For the in-app Cognito SRP flow, see [Northstar custom authentication](northstar-custom-auth.md).
 
 ## WP1 — Identity
 
@@ -79,7 +79,7 @@ Status: **HTTP API deployed; live authenticated route/authorization checks pendi
 Status: **Cognito/API client wiring implemented; production build passed; local live configuration and browser acceptance pending**
 
 - Responsive portal with four-stage progress, document checklist, policy acceptance, equipment/manager status and support dialog.
-- Uses Cognito OAuth authorization-code grant with PKCE, state validation, session-scoped token storage, refresh on expiry and sign-out.
+- Uses the Northstar in-app Cognito SRP sign-in, session-scoped Amplify token storage, automatic refresh and sign-out. The hosted Cognito login page is no longer part of the frontend sign-in path.
 - Adds the ID token as a bearer token on API requests and parses structured backend error envelopes.
 - Live mode resolves the signed-in employee through `GET /employees/me`, matching the verified JWT subject to stored `cognito_sub`.
 - Document uploads check the presigned S3 PUT response, poll document status and surface verified/rejected/pending state.
