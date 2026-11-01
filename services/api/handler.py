@@ -85,9 +85,9 @@ def _group_names(claims: dict[str, Any]) -> list[str]:
     if value.startswith("[") and value.endswith("]"):
         value = value[1:-1].strip()
     return [
-        part.strip().strip("\\"'").strip()
+        part.strip().strip(" '")
         for part in value.split(",")
-        if part.strip().strip("\\"'").strip()
+        if part.strip().strip(" '")
     ]
 
 
