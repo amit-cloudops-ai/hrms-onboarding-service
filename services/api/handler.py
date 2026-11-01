@@ -75,6 +75,27 @@ def _is_admin(claims: dict[str, Any]) -> bool:
             groups = [part.strip() for part in groups.split(",") if part.strip()]
     return isinstance(groups, list) and configured in groups
 
+def _log_admin_denial(claims: dict[str, Any]) -> None:
+    """Log safe claim diagnostics without recording tokens or personal data."""
+    groups = claims.get("cognito:groups")
+    configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins")
+    normalized = groups
+    if isinstance(normalized, str):
+        try:
+            decoded = json.loads(normalized)
+            normalized = decoded if isinstance(decoded, list) else [normalized]
+        except json.JSONDecodeError:
+            normalized = [part.strip() for part in normalized.split(",") if part.strip()]
+    logger.warning(
+        "HR admin authorization denied: groups_claim_present=%s groups_claim_type=%s "
+        "groups_claim_is_list=%s configured_group_match=%s token_use=%s",
+        "cognito:groups" in claims,
+        type(groups).__name__ if groups is not None else "missing",
+        isinstance(normalized, list),
+        isinstance(normalized, list) and configured in normalized,
+        claims.get("token_use", "missing"),
+    )
+
 
 def _is_self(claims: dict[str, Any], employee: dict[str, Any]) -> bool:
     """Authorize self-service by Cognito's immutable subject, never mutable email."""
@@ -240,6 +261,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
 
     if method == "POST" and path == "/employees":
         if not admin:
+            _log_admin_denial(claims)
             return _error(403, "FORBIDDEN", "HR administrator access is required.")
         try:
             payload = _json_body(event)
@@ -300,6 +322,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(502, "DATA_ACCESS_FAILED", "Your employee profile could not be retrieved.")
     if method == "GET" and path == "/employees":
         if not admin:
+            _log_admin_denial(claims)
             return _error(403, "FORBIDDEN", "HR administrator access is required.")
         table = _employees_table(employees_table)
         try:
@@ -388,6 +411,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
 
     if method == "POST" and isinstance(employee_id, str) and path.startswith(f"/employees/{employee_id}/stages/") and path.endswith("/complete"):
         if not admin:
+            _log_admin_denial(claims)
             return _error(403, "FORBIDDEN", "HR administrator access is required.")
         stage = path[len(f"/employees/{employee_id}/stages/"):-len("/complete")].strip("/")
         if stage not in STAGES:
