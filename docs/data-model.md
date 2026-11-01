@@ -7,4 +7,4 @@
 | hrms-dev-documents | PK employee_id, SK doc_type | s3_key, status (missing, uploaded, verified, rejected), file_size, content_type, requested_at, validated_at |
 | hrms-dev-equipment | PK asset_id | type, model, status (available, assigned), assigned_to |
 
-GSI on `hrms-dev-employees`: `status-index` (PK status) for the HR dashboard.
+GSIs on `hrms-dev-employees`: `status-index` (PK status) for the HR dashboard; `cognito-sub-index` (PK cognito_sub) for indexed employee self-profile lookup.
