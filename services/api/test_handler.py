@@ -140,7 +140,7 @@ class ApiResponseTests(unittest.TestCase):
 
     def test_employee_list_does_not_leak_internal_identity_or_execution_fields(self):
         employees = Mock()
-        employees.query.return_value = {"Items": [{
+        employees.scan.return_value = {"Items": [{
             "employee_id": "emp-1",
             "email": "employee@example.com",
             "cognito_sub": "internal-sub",
