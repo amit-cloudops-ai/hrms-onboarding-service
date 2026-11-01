@@ -293,5 +293,18 @@ class ApiResponseTests(unittest.TestCase):
         table.delete_item.assert_called_once_with(Key={"employee_id": "emp-1"})
 
 
+    def test_admin_group_accepts_bracketed_single_group_claim(self):
+        claims = {"cognito:groups": "[hr-admins]"}
+        self.assertTrue(handler._is_admin(claims))
+
+    def test_admin_group_accepts_json_array_claim(self):
+        claims = {"cognito:groups": '["hr-admins"]'}
+        self.assertTrue(handler._is_admin(claims))
+
+    def test_admin_group_does_not_accept_similar_group_name(self):
+        claims = {"cognito:groups": "[hr-admins-other]"}
+        self.assertFalse(handler._is_admin(claims))
+
+
 if __name__ == "__main__":
     unittest.main()
