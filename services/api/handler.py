@@ -272,11 +272,19 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(401, "AUTHENTICATION_REQUIRED", "A valid Cognito subject is required.")
         try:
             table = _employees_table(employees_table)
-            from boto3.dynamodb.conditions import Attr
-            result = table.scan(FilterExpression=Attr("cognito_sub").eq(caller_sub))
+            result = table.query(
+                IndexName="cognito-sub-index",
+                KeyConditionExpression=Key("cognito_sub").eq(caller_sub),
+                ConsistentRead=False,
+            )
             matches = list(result.get("Items", []))
             while result.get("LastEvaluatedKey"):
-                result = table.scan(FilterExpression=Attr("cognito_sub").eq(caller_sub), ExclusiveStartKey=result["LastEvaluatedKey"])
+                result = table.query(
+                    IndexName="cognito-sub-index",
+                    KeyConditionExpression=Key("cognito_sub").eq(caller_sub),
+                    ExclusiveStartKey=result["LastEvaluatedKey"],
+                    ConsistentRead=False,
+                )
                 matches.extend(result.get("Items", []))
             if not matches:
                 return _error(404, "EMPLOYEE_PROFILE_NOT_LINKED", "No employee profile is linked to this Cognito account.")
