@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: HRMS WP5 HTTP API (template only; not deployed).
+Description: HRMS WP5 HTTP API with a minimal, explicitly assembled Lambda artifact.
 
 Parameters:
   CognitoUserPoolId:
@@ -74,8 +74,10 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: hrms-dev-api
-      CodeUri: ../..
-      Handler: services.api.handler.lambda_handler
+      CodeUri: .
+      Handler: handler.lambda_handler
+      Metadata:
+        BuildMethod: makefile
       Runtime: python3.12
       Timeout: 30
       MemorySize: 256
