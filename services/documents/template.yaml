@@ -1,0 +1,123 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: WP3 employee document collection service
+
+Parameters:
+  EmployeesTableName:
+    Type: String
+    Description: Name of the existing employees DynamoDB table
+
+  DocumentsTableName:
+    Type: String
+    Default: hrms-dev-documents
+    Description: Name of the existing documents DynamoDB table
+
+  UploadAllowedOrigin:
+    Type: String
+    Default: http://localhost:3000
+    Description: Exact employee portal origin; replace before deployment
+
+  UploadUrlTtlSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 1
+    MaxValue: 604800
+
+Resources:
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref UploadAllowedOrigin
+            AllowedMethods:
+              - PUT
+            AllowedHeaders:
+              - Content-Type
+            ExposedHeaders:
+              - ETag
+            MaxAge: 300
+
+  DocumentRejectedTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: WP3 rejected document notifications
+
+  DocumentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub hrms-dev-documents-${AWS::StackName}
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          DOCUMENTS_TABLE: !Ref DocumentsTableName
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          SNS_TOPIC_ARN: !Ref DocumentRejectedTopic
+          UPLOAD_URL_TTL_SECONDS: !Ref UploadUrlTtlSeconds
+      Policies:
+        - Statement:
+            - Sid: ReadEmployeeRecords
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}
+
+            - Sid: ManageDocumentMetadata
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DocumentsTableName}
+
+            - Sid: ManageDocumentObjects
+              Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource: !Sub ${DocumentsBucket.Arn}/*
+
+            - Sid: NotifyHR
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref DocumentRejectedTopic
+      Events:
+        DocumentUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref DocumentsBucket
+            Events: s3:ObjectCreated:*
+
+Outputs:
+  DocumentsFunctionArn:
+    Description: WP3 Lambda function ARN for WP5 integration
+    Value: !GetAtt DocumentsFunction.Arn
+
+  DocumentsBucketName:
+    Description: Private document storage bucket
+    Value: !Ref DocumentsBucket
+
+  RejectedDocumentTopicArn:
+    Description: SNS topic for rejected document notifications
+    Value: !Ref DocumentRejectedTopic
