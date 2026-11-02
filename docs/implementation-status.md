@@ -44,13 +44,13 @@ Status: **Implementation deployed; live callback and reminder journey pending**
 
 ## WP3 — Documents
 
-Status: **Implementation deployed; live S3 upload/validation path pending**
+Status: **Upload validation implemented; HR review workflow added to source; deployment and live acceptance pending**
 
 - Issues short-lived, object-scoped presigned PUT URLs for the three contract document types.
 - Uses immutable Cognito-sub authorization and records metadata in the existing documents table.
 - Validates actual object size, content type, and PDF/JPEG/PNG magic bytes on S3 object-created events.
 - Rejects invalid files, deletes the rejected object, notifies the HR SNS topic, and supports safe re-upload after expiry/rejection.
-- Resumes document collection only after all three required documents are verified.
+- HR receives short-lived private GET links for file-verified documents and records approve/reject decisions with reviewer identity, timestamp and mandatory rejection reason. Document collection resumes only after all three required documents are HR-approved.
 - Deployed private bucket: `hrms-924422830139-us-east-1-hrms-dev-documents-documents`.
 
 ## WP4 — Stage handlers
@@ -76,25 +76,26 @@ Status: **HTTP API deployed; live authenticated route/authorization checks pendi
 
 ## WP6 — New-hire portal
 
-Status: **Cognito/API client wiring implemented; production build passed; local live configuration and browser acceptance pending**
+Status: **Cognito/API client wiring implemented; production build passed; HR rejection state and replacement upload UI added; live acceptance pending**
 
 - Responsive portal with four-stage progress, document checklist, policy acceptance, equipment/manager status and support dialog.
 - Uses the Northstar in-app Cognito SRP sign-in, session-scoped Amplify token storage, automatic refresh and sign-out. The hosted Cognito login page is no longer part of the frontend sign-in path.
 - Adds the ID token as a bearer token on API requests and parses structured backend error envelopes.
 - Live mode resolves the signed-in employee through `GET /employees/me`, matching the verified JWT subject to stored `cognito_sub`.
-- Document uploads check the presigned S3 PUT response, poll document status and surface verified/rejected/pending state.
+- Document uploads check the presigned S3 PUT response, poll document status and surface file-validation and HR-review state; employees can replace HR-rejected documents.
 - Local demo mode remains available without AWS credentials or side effects.
 - Create `frontend/portal/.env.local` using the values in the solo deployment record; do not commit it.
 
 ## WP7 — HR operations dashboard
 
-Status: **Cognito/API client wiring implemented; production build passed; local live configuration and admin acceptance pending**
+Status: **Cognito/API client wiring implemented; production build passed; document review UI and 10-second synchronization added; live acceptance pending**
 
 - Dashboard with pipeline metrics, stage analytics, search/filter, employee details, CSV export, refresh, notifications and add-new-hire workflow.
 - Uses the same Northstar in-app Cognito SRP sign-in and session-scoped Amplify token storage as the employee portal; API requests continue to use Cognito bearer tokens.
 - Live employee data is fetched from `GET /employees`; live mode starts empty rather than displaying demo employees.
 - Create form sends `full_name`, `email`, `role`, `department`, `joining_date` and `employment_type`.
 - Backend `hr-admins` group membership is the authorization boundary.
+- Employee detail view lists document validation/review status and supports private document viewing, approval and rejection with a required reason.
 - Create `frontend/hr-dashboard/.env.local` using the values in the solo deployment record; do not commit it.
 
 ## Verification record
