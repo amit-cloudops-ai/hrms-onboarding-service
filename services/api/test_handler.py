@@ -306,5 +306,33 @@ class ApiResponseTests(unittest.TestCase):
         self.assertFalse(handler._is_admin(claims))
 
 
+
+class HrDocumentReviewRouteTests(unittest.TestCase):
+    def test_only_hr_admin_can_request_private_document_review_url(self):
+        req = event(
+            "GET", "/employees/emp-1/documents/id_proof/review-url",
+            claims={"email": "hr@example.com", "sub": "hr-sub", "cognito:groups": ["hr-admins"]},
+            path_params={"employee_id": "emp-1", "document_type": "id_proof"},
+        )
+        employee_table = Mock()
+        employee_table.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
+        with patch.object(handler, "_employees_table", return_value=employee_table), \
+             patch.object(handler, "_invoke_service", return_value={"statusCode": 200, "body": "{}"}) as invoke:
+            response = handler.lambda_handler(req, None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(invoke.call_args.args[1]["action"], "create_review_url")
+        self.assertTrue(invoke.call_args.args[1]["caller"]["is_admin"])
+
+        employee_req = event(
+            "GET", "/employees/emp-1/documents/id_proof/review-url",
+            claims={"email": "employee@example.com", "sub": "employee-sub"},
+            path_params={"employee_id": "emp-1", "document_type": "id_proof"},
+        )
+        with patch.object(handler, "_employees_table", return_value=employee_table), \
+             patch.object(handler, "_invoke_service") as denied_invoke:
+            denied = handler.lambda_handler(employee_req, None)
+        self.assertEqual(denied["statusCode"], 403)
+        denied_invoke.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
