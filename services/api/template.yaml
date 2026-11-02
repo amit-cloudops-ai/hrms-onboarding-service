@@ -185,6 +185,18 @@ Resources:
             ApiId: !Ref OnboardingApi
             Path: /employees/{employee_id}/documents/upload-url
             Method: POST
+        GetDocumentReviewUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/documents/{document_type}/review-url
+            Method: GET
+        ReviewDocument:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/documents/{document_type}/review
+            Method: POST
         SignPolicies:
           Type: HttpApi
           Properties:
