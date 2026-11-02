@@ -1,7 +1,10 @@
 .PHONY: build-ApiFunction
 
-# SAM copies this CodeUri into the artifact directory before invoking make.
-# Shared runtime modules are vendored under services/api/services so the
-# Lambda package is self-contained and never reaches outside CodeUri.
+# Assemble only the files imported by the API Lambda. Do not package the
+# repository root, frontend dependencies, tests, or Python cache directories.
 build-ApiFunction:
 	mkdir -p "$(ARTIFACTS_DIR)/services/identity" "$(ARTIFACTS_DIR)/services/workflow"
+	cp handler.py "$(ARTIFACTS_DIR)/handler.py"
+	cp services/identity/handler.py "$(ARTIFACTS_DIR)/services/identity/handler.py"
+	cp services/workflow/handler.py "$(ARTIFACTS_DIR)/services/workflow/handler.py"
+	cp services/workflow/callbacks.py "$(ARTIFACTS_DIR)/services/workflow/callbacks.py"
