@@ -127,12 +127,12 @@ class DocumentRequestTests(unittest.TestCase):
         self.s3.get_object.return_value = {"Body": body}
         with patch.dict(handler.os.environ, {"STAGES_FUNCTION_NAME": "hrms-dev-stages"}), \
              patch.object(handler.boto3, "client") as client:
-            client.return_value.invoke.return_value = {"Payload": BytesIO(b'{"statusCode":202,"body":"{}"}')}
             result = handler.verify_uploaded_object("private-bucket", key, documents_table=self.documents,
                                                     s3=self.s3, now="now")
         self.assertEqual(result["status"], "verified")
         self.documents.update_item.assert_called_once()
-        client.return_value.invoke.assert_called_once()
+        # File integrity validation alone must not advance onboarding; HR approval is a separate gate.
+        client.return_value.invoke.assert_not_called()
 
     def test_invalid_magic_bytes_rejects_and_deletes_object(self):
         key = "emp-1/id_proof/" + "b" * 32 + ".pdf"
@@ -152,6 +152,80 @@ class DocumentRequestTests(unittest.TestCase):
         self.s3.delete_object.assert_called_once_with(Bucket="private-bucket", Key=key)
         sns.publish.assert_called_once()
 
+
+
+class DocumentReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.employees = Mock()
+        self.employees.get_item.return_value = {"Item": {"employee_id": "emp-1", "cognito_sub": "sub-1"}}
+        self.documents = Mock()
+        self.documents.get_item.return_value = {"Item": {
+            "employee_id": "emp-1", "doc_type": "id_proof",
+            "s3_key": "emp-1/id_proof/" + "a" * 32 + ".pdf", "status": "verified",
+        }}
+        self.admin = {"sub": "hr-sub", "email": "hr@example.com", "is_admin": True}
+
+    def test_review_url_is_admin_only_and_short_lived(self):
+        s3 = Mock()
+        s3.generate_presigned_url.return_value = "https://signed.example/read"
+        with patch.dict(handler.os.environ, {"DOCUMENTS_BUCKET": "private-bucket"}):
+            response = handler.create_review_url(
+                {"employee_id": "emp-1", "document_type": "id_proof", "caller": self.admin},
+                documents_table=self.documents, employees_table=self.employees, s3=s3,
+            )
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(json.loads(response["body"])["review_url"], "https://signed.example/read")
+        self.assertEqual(s3.generate_presigned_url.call_args.kwargs["ExpiresIn"], 300)
+        denied = handler.create_review_url(
+            {"employee_id": "emp-1", "document_type": "id_proof",
+             "caller": {"sub": "sub-1", "is_admin": False}},
+            documents_table=self.documents, employees_table=self.employees, s3=s3,
+        )
+        self.assertEqual(denied["statusCode"], 403)
+
+    def test_rejection_requires_reason(self):
+        response = handler.review_document(
+            {"employee_id": "emp-1", "document_type": "id_proof", "decision": "rejected",
+             "caller": self.admin},
+            documents_table=self.documents, employees_table=self.employees,
+        )
+        self.assertEqual(response["statusCode"], 400)
+        self.documents.update_item.assert_not_called()
+
+    def test_approval_records_reviewer_and_completes_only_after_all_approved(self):
+        self.documents.query.return_value = {"Items": [
+            {"doc_type": "id_proof", "status": "verified", "review_status": "approved"},
+            {"doc_type": "degree_certificate", "status": "verified", "review_status": "approved"},
+            {"doc_type": "signed_offer_letter", "status": "verified", "review_status": "approved"},
+        ]}
+        with patch.dict(handler.os.environ, {"STAGES_FUNCTION_NAME": "hrms-dev-stages"}), \
+             patch.object(handler.boto3, "client") as client:
+            client.return_value.invoke.return_value = {"Payload": BytesIO(b'{"statusCode":202,"body":"{}"}')}
+            response = handler.review_document(
+                {"employee_id": "emp-1", "document_type": "id_proof", "decision": "approved",
+                 "caller": self.admin},
+                documents_table=self.documents, employees_table=self.employees, now="review-time",
+            )
+        self.assertEqual(response["statusCode"], 200)
+        values = self.documents.update_item.call_args.kwargs["ExpressionAttributeValues"]
+        self.assertEqual(values[":reviewer"], "hr@example.com")
+        self.assertEqual(values[":decision"], "approved")
+        client.return_value.invoke.assert_called_once()
+
+    def test_approval_does_not_complete_until_every_document_is_approved(self):
+        self.documents.query.return_value = {"Items": [
+            {"doc_type": "id_proof", "status": "verified", "review_status": "approved"},
+            {"doc_type": "degree_certificate", "status": "verified", "review_status": "pending"},
+            {"doc_type": "signed_offer_letter", "status": "verified", "review_status": "pending"},
+        ]}
+        with patch.object(handler.boto3, "client") as client:
+            response = handler.review_document(
+                {"employee_id": "emp-1", "document_type": "id_proof", "decision": "approved",
+                 "caller": self.admin},
+                documents_table=self.documents, employees_table=self.employees, now="review-time",
+            )
+        self.assertEqual(response["statusCode"], 200)
+        client.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
