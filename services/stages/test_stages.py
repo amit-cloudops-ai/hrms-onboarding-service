@@ -1,201 +1,108 @@
-from datetime import datetime
+import json
+import os
 import unittest
 from unittest.mock import patch
 
-from services.stages.stages import (
-    STAGES,
-    STATUSES,
-    WP4_STAGES,
-    build_stage_record,
-    validate_employee_id,
-    validate_stage,
-    validate_status,
-)
-from services.stages.handler import process_stage
+from services.stages.handler import lambda_handler, process_stage
+from services.stages.stages import STAGES, STATUSES, WP4_STAGES
+
+
+def event(stage="it_provisioning", **overrides):
+    value = {
+        "action": "execute_stage",
+        "employee_id": "EMP001",
+        "stage": stage,
+        "correlation_id": "exec-123-stage-" + stage,
+    }
+    value.update(overrides)
+    return value
 
 
 class TestStageDefinitions(unittest.TestCase):
-
     def test_all_stages_exist(self):
         self.assertEqual(len(STAGES), 4)
 
-    def test_all_statuses_exist(self):
-        self.assertEqual(
-            STATUSES,
-            ("pending", "in_progress", "complete")
-        )
+    def test_statuses(self):
+        self.assertEqual(STATUSES, ("pending", "in_progress", "complete"))
 
-    def test_wp4_stage_subset_excludes_document_collection(self):
+    def test_wp4_only_owns_business_stages(self):
         self.assertEqual(
             WP4_STAGES,
             ("it_provisioning", "policy_signoff", "manager_intro"),
         )
-        self.assertIn("document_collection", STAGES)
         self.assertNotIn("document_collection", WP4_STAGES)
 
-    def test_build_stage_record(self):
-        record = build_stage_record(
-            "EMP001", "it_provisioning"
-        )
-        self.assertEqual(record["status"], "pending")
 
-    def test_empty_employee_id(self):
-        with self.assertRaises(ValueError):
-            validate_employee_id("")
-
-    def test_invalid_stage(self):
-        with self.assertRaises(ValueError):
-            validate_stage("unknown")
-
-    def test_invalid_status(self):
-        with self.assertRaises(ValueError):
-            validate_status("unknown")
-
-
-class TestStageHandler(unittest.TestCase):
-
-    @patch("services.stages.handler.save_stage_record")
-    def test_it_provisioning_persists_both_statuses(self, mock_save):
-        result = process_stage({
-            "employee_id": "EMP001",
-            "stage": "it_provisioning",
-        })
-
-        self.assertEqual(mock_save.call_count, 2)
-        in_progress = mock_save.call_args_list[0].args[0]
-        completed = mock_save.call_args_list[1].args[0]
-        self.assertEqual(in_progress["status"], "in_progress")
-        self.assertIn("started_at", in_progress)
-        self.assertNotIn("completed_at", in_progress)
-        self.assertEqual(completed["status"], "complete")
-        self.assertEqual(completed["started_at"], in_progress["started_at"])
-        self.assertIn("completed_at", completed)
-        self.assertNotIn("action_result", completed)
-        self.assertEqual(result["status"], completed["status"])
-        self.assertEqual(result["started_at"], completed["started_at"])
-        self.assertEqual(result["completed_at"], completed["completed_at"])
-        self.assertEqual(result["action_result"]["mode"], "simulated")
-
-        for timestamp_field in ("started_at", "completed_at"):
-            parsed = datetime.fromisoformat(result[timestamp_field])
-            self.assertIsNotNone(parsed.tzinfo)
-            self.assertEqual(parsed.utcoffset().total_seconds(), 0)
-
-    @patch("services.stages.handler.execute_simulated_action")
-    @patch("services.stages.handler.save_stage_record")
-    def test_in_progress_is_saved_before_action_and_complete_after(
-        self,
-        mock_save,
-        mock_action,
-    ):
-        calls = []
-        mock_save.side_effect = lambda record: calls.append(
-            ("save", record["status"])
-        )
-        mock_action.side_effect = lambda stage, event: (
-            calls.append(("action", stage))
-            or {"action": "simulated", "mode": "simulated", "success": True}
-        )
-
-        process_stage({
-            "employee_id": "EMP001",
-            "stage": "it_provisioning",
-        })
-
+class TestWP4BusinessAdapter(unittest.TestCase):
+    def test_it_provisioning_contract_response(self):
+        result = process_stage(event())
         self.assertEqual(
-            calls,
-            [
-                ("save", "in_progress"),
-                ("action", "it_provisioning"),
-                ("save", "complete"),
-            ],
+            set(result),
+            {"ok", "employee_id", "stage", "status", "mode", "result"},
         )
-
-    @patch("services.stages.handler.save_stage_record")
-    def test_policy_signoff(self, mock_save):
-        result = process_stage({
-            "employee_id": "EMP001",
-            "stage": "policy_signoff",
-        })
+        self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "complete")
-        self.assertEqual(mock_save.call_count, 2)
+        self.assertEqual(result["mode"], "simulated")
+        self.assertEqual(result["result"]["equipment_status"], "assigned")
+        self.assertEqual(result["result"]["account_status"], "created")
 
-    @patch("services.stages.handler.save_stage_record")
-    def test_manager_intro(self, mock_save):
-        result = process_stage({
-            "employee_id": "EMP001",
-            "stage": "manager_intro",
-        })
-        self.assertEqual(result["status"], "complete")
-        self.assertEqual(mock_save.call_count, 2)
+    def test_same_correlation_returns_same_simulated_result(self):
+        first = process_stage(event())
+        second = process_stage(event())
+        self.assertEqual(first, second)
 
-    @patch("services.stages.handler.save_stage_record")
-    def test_document_collection_rejected(self, mock_save):
+    def test_policy_signoff(self):
+        result = process_stage(event("policy_signoff"))
+        self.assertEqual(result["result"]["policy_status"], "accepted")
+
+    def test_manager_intro(self):
+        result = process_stage(event("manager_intro"))
+        self.assertEqual(result["result"]["invitation_status"], "created")
+
+    def test_document_collection_rejected(self):
+        with self.assertRaisesRegex(ValueError, "does not process"):
+            process_stage(event("document_collection"))
+
+    def test_action_required(self):
+        with self.assertRaisesRegex(ValueError, "action must be"):
+            process_stage(event(action="wrong"))
+
+    def test_correlation_id_required(self):
+        with self.assertRaisesRegex(ValueError, "correlation_id is required"):
+            process_stage(event(correlation_id=" "))
+
+    def test_employee_id_required(self):
         with self.assertRaises(ValueError):
-            process_stage({
-                "employee_id": "EMP001",
-                "stage": "document_collection"
-            })
-        mock_save.assert_not_called()
+            process_stage(event(employee_id=" "))
 
-    @patch("services.stages.handler.save_stage_record")
-    @patch("services.stages.handler.execute_simulated_action")
-    def test_simulated_action_failure_keeps_in_progress_record(
-        self,
-        mock_action,
-        mock_save,
-    ):
-        mock_action.return_value = {
-            "action": "simulated_it_provisioning",
-            "mode": "simulated",
-            "success": False,
-        }
+    def test_invalid_stage_rejected(self):
+        with self.assertRaises(ValueError):
+            process_stage(event("unknown"))
 
-        with self.assertRaisesRegex(RuntimeError, "Stage action failed"):
-            process_stage({
-                "employee_id": "EMP001",
-                "stage": "it_provisioning",
-            })
-
-        self.assertEqual(mock_save.call_count, 1)
-        self.assertEqual(mock_save.call_args.args[0]["status"], "in_progress")
-
-    @patch("services.stages.handler.save_stage_record")
-    def test_non_dictionary_event_is_rejected(self, mock_save):
+    def test_non_object_event_rejected(self):
         with self.assertRaises(ValueError):
             process_stage(None)
 
-        mock_save.assert_not_called()
-
-    @patch("services.stages.handler.save_stage_record")
-    def test_real_mode_remains_unimplemented_without_persistence(self, mock_save):
+    def test_real_mode_fails_closed(self):
         with self.assertRaises(NotImplementedError):
-            process_stage({
-                "employee_id": "EMP001",
-                "stage": "it_provisioning",
-            }, mode="real")
+            process_stage(event(), mode="real")
 
-        mock_save.assert_not_called()
-
-    @patch("services.stages.handler.save_stage_record")
-    def test_invalid_employee_id_is_rejected(self, mock_save):
+    def test_invalid_mode_rejected(self):
         with self.assertRaises(ValueError):
-            process_stage({
-                "employee_id": "   ",
-                "stage": "it_provisioning",
-            })
+            process_stage(event(), mode="other")
 
-        mock_save.assert_not_called()
+    @patch.dict(os.environ, {"MODE": "simulated"}, clear=False)
+    def test_lambda_handler_uses_deployment_mode_and_contract(self):
+        result = lambda_handler(event(), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(json.loads(result["body"])["ok"], True)
 
-    @patch("services.stages.handler.save_stage_record")
-    def test_invalid_stage_is_rejected(self, mock_save):
-        with self.assertRaises(ValueError):
-            process_stage({
-                "employee_id": "EMP001",
-                "stage": "unknown",
-            })
-
-        mock_save.assert_not_called()
+    @patch.dict(os.environ, {"MODE": "real"}, clear=False)
+    def test_lambda_handler_does_not_allow_event_to_override_mode(self):
+        request = event(mode="simulated")
+        result = lambda_handler(request, None)
+        self.assertEqual(result["statusCode"], 501)
+        self.assertFalse(json.loads(result["body"])["ok"])
 
 
 if __name__ == "__main__":
