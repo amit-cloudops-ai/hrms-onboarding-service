@@ -393,6 +393,39 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": admin},
         })
 
+    if isinstance(employee_id, str) and path.startswith(f"/employees/{employee_id}/documents/") and path.endswith("/review-url") and method == "GET":
+        if not admin:
+            _log_admin_denial(claims)
+            return _error(403, "FORBIDDEN", "HR administrator access is required.")
+        if _get_employee(employee_id, table=employees_table) is None:
+            return _error(404, "NOT_FOUND", "Employee was not found.")
+        doc_type = path[len(f"/employees/{employee_id}/documents/"):-len("/review-url")]
+        if doc_type not in ("id_proof", "degree_certificate", "signed_offer_letter"):
+            return _error(400, "INVALID_DOCUMENT", "Unsupported document type.")
+        return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
+            "action": "create_review_url", "employee_id": employee_id, "document_type": doc_type,
+            "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": True},
+        })
+
+    if isinstance(employee_id, str) and path.startswith(f"/employees/{employee_id}/documents/") and path.endswith("/review") and method == "POST":
+        if not admin:
+            _log_admin_denial(claims)
+            return _error(403, "FORBIDDEN", "HR administrator access is required.")
+        if _get_employee(employee_id, table=employees_table) is None:
+            return _error(404, "NOT_FOUND", "Employee was not found.")
+        doc_type = path[len(f"/employees/{employee_id}/documents/"):-len("/review")]
+        if doc_type not in ("id_proof", "degree_certificate", "signed_offer_letter"):
+            return _error(400, "INVALID_DOCUMENT", "Unsupported document type.")
+        try:
+            payload = _json_body(event)
+        except ValueError as exc:
+            return _error(400, "INVALID_REQUEST", str(exc))
+        return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
+            "action": "review_document", "employee_id": employee_id, "document_type": doc_type,
+            "decision": payload.get("decision"), "reason": payload.get("reason", ""),
+            "caller": {"email": claims.get("email"), "sub": claims.get("sub"), "is_admin": True},
+        })
+
     if method == "POST" and isinstance(employee_id, str) and path == f"/employees/{employee_id}/documents/upload-url":
         employee = _get_employee(employee_id, table=employees_table)
         if employee is None:
