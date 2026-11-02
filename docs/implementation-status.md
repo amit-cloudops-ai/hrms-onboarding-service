@@ -2,130 +2,100 @@
 
 **Branch:** `v1-solo`  
 **AWS region:** `us-east-1`  
-**Last deployment confirmation:** 1 November 2026
+**Live acceptance update:** 2 November 2026
 
 ## Current release status
 
-The five backend development stacks have been deployed and each returned `CREATE_COMPLETE`:
+The five development backend stacks have been deployed. The live HR dashboard and employee portal have now been opened and exercised against the deployed application.
 
-| Stack | Status |
+| Stack | Deployment |
 |---|---|
-| `hrms-dev-foundation` | `CREATE_COMPLETE` |
-| `hrms-dev-stages` | `CREATE_COMPLETE` |
-| `hrms-dev-documents` | `CREATE_COMPLETE` |
-| `hrms-dev-workflow` | `CREATE_COMPLETE` |
-| `hrms-dev-api` | `CREATE_COMPLETE` |
+| `hrms-dev-foundation` | Previously confirmed deployed |
+| `hrms-dev-stages` | Previously confirmed deployed |
+| `hrms-dev-documents` | Previously confirmed deployed |
+| `hrms-dev-workflow` | Previously confirmed deployed |
+| `hrms-dev-api` | Previously confirmed deployed |
 
-The API endpoint is `https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com`.
+**API endpoint:** `https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com`
 
-**Boundary:** stack creation is confirmed; live end-to-end application behavior is not yet confirmed. Frontend environment setup, Cognito login, admin/employee authorization, employee creation, S3 upload validation, policy sign-off, manager completion, notification delivery and failure-path testing remain.
+### Live checks confirmed on 2 November 2026
 
-For the complete implementation history, problems/fixes, AWS resource inventory, deployment commands, Console walkthrough, local frontend configuration, acceptance checklist and cleanup procedure, see [Solo implementation and AWS deployment record](solo-implementation-and-aws-deployment-record.md). For the in-app Cognito SRP flow, see [Northstar custom authentication](northstar-custom-auth.md).
+- [x] HR administrator can sign in to the HR dashboard using Cognito.
+- [x] Dashboard is configured for live API mode (`VITE_DEMO_MODE=false`); it is not using the demo employee seed data.
+- [x] HR dashboard loads employee records from the live API.
+- [x] HR can open employee documents; document content is displayed successfully.
+- [x] Employee can sign in to the onboarding portal using an existing employee account.
+- [x] Employee portal loads successfully after authentication.
+
+These are manual live-application checks, not merely local unit-test results.
+
+### Not yet recorded as individually verified
+
+The following workflows must not be described as production-verified until their actual live outcomes are checked and recorded:
+
+- Employee document upload, S3 object validation and status polling.
+- HR approval and rejection, including mandatory rejection reason.
+- Employee visibility of HR decisions and replacement upload after rejection.
+- Policy acceptance and manager-introduction completion.
+- Full Step Functions progression, reminder delivery, SNS delivery and failure-path behavior.
+- Anonymous 401 and employee self-only authorization checks.
+- Production hardening, MFA, IAM review, retention, monitoring and cost controls.
 
 ## WP1 — Identity
 
-Status: **Implementation and offline tests passing; deployed foundation exists; live employee-creation path pending acceptance testing**
-
-- Validates and normalizes employee input.
-- Writes the employee record, creates the Cognito identity, and stores Cognito's immutable `sub` on the employee record.
-- Performs compensating cleanup when identity creation or subject linkage fails.
-- WP5 self-service authorization compares the JWT `sub` with the stored `cognito_sub`; email alone does not grant access.
+Implementation and offline tests are recorded as passing. Live HR Cognito authentication and employee sign-in through the portal have now been manually confirmed. Employee creation and the full invitation/identity lifecycle still require a separately recorded acceptance test.
 
 ## WP2 — Workflow
 
-Status: **Implementation deployed; live callback and reminder journey pending**
-
-- Orchestrates the four contract stages in order.
-- Stores callback tokens server-side and never returns them in responses or reminder messages.
-- Waits up to 24 hours for each callback, sends a reminder on timeout, and starts a new callback wait.
-- Persists stage completion after Step Functions accepts the callback.
-- Dispatches each active stage to WP4; WP4 owns stage-specific behavior.
-- Deployed state machine: `arn:aws:states:us-east-1:924422830139:stateMachine:hrms-dev-onboarding`.
+Workflow implementation and deployment are recorded. Live end-to-end stage progression, callbacks, timeout/reminder behavior and notification delivery still require explicit verification.
 
 ## WP3 — Documents
 
-Status: **Upload validation implemented; HR review workflow added to source; deployment and live acceptance pending**
-
-- Issues short-lived, object-scoped presigned PUT URLs for the three contract document types.
-- Uses immutable Cognito-sub authorization and records metadata in the existing documents table.
-- Validates actual object size, content type, and PDF/JPEG/PNG magic bytes on S3 object-created events.
-- Rejects invalid files, deletes the rejected object, notifies the HR SNS topic, and supports safe re-upload after expiry/rejection.
-- HR receives short-lived private GET links for file-verified documents and records approve/reject decisions with reviewer identity, timestamp and mandatory rejection reason. Document collection resumes only after all three required documents are HR-approved.
-- Deployed private bucket: `hrms-924422830139-us-east-1-hrms-dev-documents-documents`.
+Upload validation and HR review implementation are present in source. Live HR document viewing is confirmed. Upload validation, approval/rejection, re-upload and all associated state transitions still require explicit end-to-end verification.
 
 ## WP4 — Stage handlers
 
-Status: **Implementation deployed; simulation mode enabled; live stage progression pending acceptance testing**
-
-- Simulated IT provisioning writes deterministic laptop/monitor assignments to the equipment table and completes automatically; real mode requires an explicitly configured provisioning Lambda.
-- Stores versioned policy acceptance and resumes `policy_signoff` only after every configured required policy is accepted.
-- Publishes a manager-introduction action-required notification and waits for HR completion.
-- Uses the WP2 task token only for Step Functions callback submission; token values are not returned or logged.
-- Deployed Lambda: `hrms-dev-stages`. `SimulationMode=true` for the first development test.
+Stage-handler implementation is deployed. IT provisioning remains in simulation mode. Policy acceptance, manager introduction and callback-driven progression still require explicit live acceptance tests.
 
 ## WP5 — API
 
-Status: **HTTP API deployed; live authenticated route/authorization checks pending**
-
-- Implements the routes in `docs/api-contract.md` behind an API Gateway Cognito JWT authorizer.
-- Enforces HR-admin checks and immutable-sub employee self-access checks.
-- Creates employee identity and starts the onboarding execution, persisting its execution ARN privately.
-- Exposes server-side callback completion without exposing task tokens.
-- Routes document and policy operations to WP3/WP4 adapters and fails closed if an adapter is missing or fails.
-- API endpoint: `https://mv5cyfzsya.execute-api.us-east-1.amazonaws.com`.
+HTTP API is deployed behind a Cognito JWT authorizer. Live dashboard access to employee records and employee document viewing are confirmed. The full authorization matrix and every API operation still require regression testing.
 
 ## WP6 — New-hire portal
 
-Status: **Cognito/API client wiring implemented; production build passed; HR rejection state and replacement upload UI added; live acceptance pending**
-
-- Responsive portal with four-stage progress, document checklist, policy acceptance, equipment/manager status and support dialog.
-- Uses the Northstar in-app Cognito SRP sign-in, session-scoped Amplify token storage, automatic refresh and sign-out. The hosted Cognito login page is no longer part of the frontend sign-in path.
-- Adds the ID token as a bearer token on API requests and parses structured backend error envelopes.
-- Live mode resolves the signed-in employee through `GET /employees/me`, matching the verified JWT subject to stored `cognito_sub`.
-- Document uploads check the presigned S3 PUT response, poll document status and surface file-validation and HR-review state; employees can replace HR-rejected documents.
-- Local demo mode remains available without AWS credentials or side effects.
-- Create `frontend/portal/.env.local` using the values in the solo deployment record; do not commit it.
+Cognito sign-in and successful portal loading for an existing employee account are confirmed live. The portal includes onboarding progress, document checklist, policy acceptance, equipment/manager status and document-review/replacement UI. Each business action must be exercised against live data before being marked verified.
 
 ## WP7 — HR operations dashboard
 
-Status: **Cognito/API client wiring implemented; production build passed; document review UI and 10-second synchronization added; live acceptance pending**
-
-- Dashboard with pipeline metrics, stage analytics, search/filter, employee details, CSV export, refresh, notifications and add-new-hire workflow.
-- Uses the same Northstar in-app Cognito SRP sign-in and session-scoped Amplify token storage as the employee portal; API requests continue to use Cognito bearer tokens.
-- Live employee data is fetched from `GET /employees`; live mode starts empty rather than displaying demo employees.
-- Create form sends `full_name`, `email`, `role`, `department`, `joining_date` and `employment_type`.
-- Backend `hr-admins` group membership is the authorization boundary.
-- Employee detail view lists document validation/review status and supports private document viewing, approval and rejection with a required reason.
-- Create `frontend/hr-dashboard/.env.local` using the values in the solo deployment record; do not commit it.
+Cognito HR sign-in, live employee listing and employee document viewing are confirmed live. The dashboard includes employee management, search/filter, employee details, document review controls and related HR operations. Employee creation, approval/rejection and all remaining actions require explicit live acceptance tests.
 
 ## Verification record
 
-- Offline backend regression suite: **84 tests passed**, as reported during the solo deployment session. These tests use local/mocked services and are not proof of live AWS integration.
-- Both Vite frontend production builds passed in the recorded GitHub Actions workflow after Vite environment typings and Cognito/API wiring were added.
-- SAM builds for WP2, WP3 and WP5 succeeded during the deployment session. SAM printed `requirements.txt file not found. Continuing the build without dependencies.`; deployed Lambda runtime imports must be verified in CloudWatch and missing third-party dependencies packaged if needed.
-- Each of the five CloudFormation stacks returned `CREATE_COMPLETE`. Change sets were reviewed before execution. This confirms resource provisioning, not the full business journey.
+- Previously recorded offline backend regression suite: **84 tests passed**. These tests use local/mocked services and are not proof of live AWS integration.
+- Both frontend production builds passed in the recorded workflow.
+- Five backend CloudFormation stacks were previously confirmed deployed.
+- On 2 November 2026, manual live checks confirmed HR Cognito sign-in, live employee listing, HR document viewing and employee portal sign-in/loading.
 
-## Known production hardening
+## Production hardening still required
 
-- Development Cognito MFA is OFF because the initial optional-MFA configuration failed without SMS configuration. Configure and test TOTP MFA before production.
-- IT provisioning is simulated; connect a real provisioning adapter before real operations.
+- Development Cognito MFA is OFF. Configure and test TOTP MFA before production.
+- IT provisioning is simulated; connect a real provisioning adapter before operational use.
 - Configure approved SNS subscriptions and verify delivery.
-- Review IAM least privilege, especially employee-table access and Step Functions callback permissions.
+- Review IAM least privilege, especially employee-table and Step Functions callback permissions.
 - Set exact production HTTPS origins for Cognito callback/logout, API CORS and S3 upload CORS.
 - Establish data retention, backups, CloudWatch retention/alerts, incident response and cost budgets.
 - Review actual AWS charges; deployed services can incur costs.
 
-## Next acceptance gates
+## Remaining acceptance gates
 
-- [ ] Configure both local frontend environment files and verify the Northstar in-app Cognito SRP sign-in.
-- [ ] Create/verify HR admin membership in `hr-admins`.
-- [ ] Verify anonymous 401, HR-admin access and employee self-only access.
-- [ ] Create a disposable employee and verify Cognito identity, DynamoDB record and Step Functions execution.
-- [ ] Verify simulated IT provisioning and equipment assignment.
-- [ ] Verify valid/invalid document uploads, asynchronous S3 validation, status polling and retry.
-- [ ] Verify all required policy acceptances and manager-intro completion.
-- [ ] Verify failure paths, CloudWatch logs, SNS delivery and AWS spend.
-- [ ] Complete production MFA, IAM, privacy and real-adapter hardening before production use.
+- [ ] Exercise employee document upload and verify S3 validation plus status polling.
+- [ ] Exercise HR approval and rejection with a rejection reason.
+- [ ] Verify employee sees the decision and can replace a rejected document.
+- [ ] Verify policy acceptance and manager-introduction completion.
+- [ ] Verify Step Functions progression and callback behavior.
+- [ ] Verify authorization matrix, failure paths, CloudWatch logs and SNS delivery.
+- [ ] Run final backend and frontend regression builds.
+- [ ] Review AWS spend and complete production security/privacy hardening before any production launch.
 
 ## Working agreements
 
