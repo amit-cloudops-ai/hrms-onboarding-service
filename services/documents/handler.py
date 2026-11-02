@@ -172,10 +172,74 @@ def list_documents(event: dict[str, Any], *, documents_table: Any | None = None,
     for doc_type in DOCUMENT_TYPES:
         item = by_type.get(doc_type, {})
         documents.append({"document_type": doc_type, "status": item.get("status", "missing"),
+                          "review_status": item.get("review_status", "pending") if item.get("status") == "verified" else "not_ready",
+                          **({"review_reason": item["review_reason"]} if "review_reason" in item else {}),
+                          **({"reviewed_at": item["reviewed_at"]} if "reviewed_at" in item else {}),
                           **({"file_size": item["file_size"]} if "file_size" in item else {}),
                           **({"content_type": item["content_type"]} if "content_type" in item else {}),
                           **({"validated_at": item["validated_at"]} if "validated_at" in item else {})})
     return _response(200, {"employee_id": employee_id, "documents": documents})
+
+
+
+def create_review_url(event: dict[str, Any], *, documents_table: Any | None = None,
+                      employees_table: Any | None = None, s3: Any | None = None) -> dict[str, Any]:
+    employee_id, doc_type = event.get("employee_id"), event.get("document_type")
+    caller = event.get("caller")
+    if not isinstance(employee_id, str) or doc_type not in DOCUMENT_TYPES:
+        return _response(400, {"error": {"code": "INVALID_DOCUMENT", "message": "A valid employee and document type are required"}})
+    if not isinstance(caller, dict) or caller.get("is_admin") is not True:
+        return _response(403, {"error": {"code": "FORBIDDEN", "message": "HR administrator access is required"}})
+    allowed, _ = _authorized(employee_id, caller, employees_table)
+    if not allowed:
+        return _response(403, {"error": {"code": "FORBIDDEN", "message": "HR administrator access is required"}})
+    record = _table("DOCUMENTS_TABLE", documents_table).get_item(
+        Key={"employee_id": employee_id, "doc_type": doc_type}, ConsistentRead=True
+    ).get("Item")
+    if not isinstance(record, dict) or record.get("status") != "verified" or not record.get("s3_key"):
+        return _response(409, {"error": {"code": "DOCUMENT_NOT_READY", "message": "Only file-verified documents can be opened for HR review"}})
+    bucket = os.environ.get("DOCUMENTS_BUCKET", "").strip()
+    if not bucket:
+        return _response(503, {"error": {"code": "SERVICE_NOT_CONFIGURED", "message": "Document storage is not configured"}})
+    url = _s3(s3).generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": record["s3_key"], "ResponseContentDisposition": "inline"},
+        ExpiresIn=300,
+    )
+    return _response(200, {"document_type": doc_type, "review_url": url, "expires_in_seconds": 300})
+
+
+def review_document(event: dict[str, Any], *, documents_table: Any | None = None,
+                    employees_table: Any | None = None, now: str | None = None) -> dict[str, Any]:
+    employee_id, doc_type = event.get("employee_id"), event.get("document_type")
+    caller, decision = event.get("caller"), event.get("decision")
+    reason = event.get("reason", "")
+    if not isinstance(employee_id, str) or doc_type not in DOCUMENT_TYPES or decision not in ("approved", "rejected"):
+        return _response(400, {"error": {"code": "INVALID_REVIEW", "message": "A valid document and review decision are required"}})
+    if decision == "rejected" and (not isinstance(reason, str) or not reason.strip()):
+        return _response(400, {"error": {"code": "REJECTION_REASON_REQUIRED", "message": "Provide a reason when rejecting a document"}})
+    if not isinstance(caller, dict) or caller.get("is_admin") is not True:
+        return _response(403, {"error": {"code": "FORBIDDEN", "message": "HR administrator access is required"}})
+    allowed, _ = _authorized(employee_id, caller, employees_table)
+    if not allowed:
+        return _response(403, {"error": {"code": "FORBIDDEN", "message": "HR administrator access is required"}})
+    table = _table("DOCUMENTS_TABLE", documents_table)
+    record = table.get_item(Key={"employee_id": employee_id, "doc_type": doc_type}, ConsistentRead=True).get("Item")
+    if not isinstance(record, dict) or record.get("status") != "verified":
+        return _response(409, {"error": {"code": "DOCUMENT_NOT_READY", "message": "Only file-verified documents can be reviewed"}})
+    timestamp = now or _now()
+    table.update_item(
+        Key={"employee_id": employee_id, "doc_type": doc_type},
+        UpdateExpression="SET review_status = :decision, reviewed_at = :now, reviewed_by = :reviewer, review_reason = :reason",
+        ConditionExpression="#status = :verified",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":decision": decision, ":now": timestamp,
+                                   ":reviewer": str(caller.get("email") or caller.get("sub") or "hr-admin"),
+                                   ":reason": reason.strip() if isinstance(reason, str) else "",
+                                   ":verified": "verified"},
+    )
+    return _response(200, {"employee_id": employee_id, "document_type": doc_type,
+                          "review_status": decision, "reviewed_at": timestamp})
 
 
 def _sniff(content_type: str, prefix: bytes) -> bool:
@@ -306,6 +370,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> Any:
             return create_upload_url(event)
         if action == "list_documents":
             return list_documents(event)
+        if action == "create_review_url":
+            return create_review_url(event)
+        if action == "review_document":
+            return review_document(event)
         return _response(400, {"error": {"code": "INVALID_ACTION", "message": "Unsupported document action"}})
     except ClientError:
         logger.exception("Document service dependency failed.")
