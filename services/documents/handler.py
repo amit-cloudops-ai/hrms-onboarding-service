@@ -120,17 +120,21 @@ def create_upload_url(event: dict[str, Any], *, documents_table: Any | None = No
         if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
             raise
         existing = table.get_item(Key={"employee_id": employee_id, "doc_type": doc_type}, ConsistentRead=True).get("Item")
-        if not isinstance(existing, dict) or existing.get("status") not in ("missing", "rejected"):
+        retryable = isinstance(existing, dict) and (
+            existing.get("status") in ("missing", "rejected") or existing.get("review_status") == "rejected"
+        )
+        if not retryable:
             return _response(409, {"error": {"code": "DOCUMENT_ALREADY_VERIFIED", "message": "This document type is already uploaded or verified"}})
         # Permit retry after an expired upload URL or rejected file. A fresh
         # random key prevents a stale URL from overwriting the replacement.
         table.update_item(
             Key={"employee_id": employee_id, "doc_type": doc_type},
-            UpdateExpression="SET s3_key = :key, #status = :status, file_size = :size, content_type = :type, requested_at = :now REMOVE validated_at",
-            ConditionExpression="#status IN (:missing, :rejected)",
+            UpdateExpression="SET s3_key = :key, #status = :status, file_size = :size, content_type = :type, requested_at = :now REMOVE validated_at, review_status, reviewed_at, reviewed_by, review_reason",
+            ConditionExpression="#status IN (:missing, :rejected) OR review_status = :review_rejected",
             ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={":key": key, ":status": "missing", ":size": file_size, ":type": content_type,
-                                       ":now": timestamp, ":missing": "missing", ":rejected": "rejected"},
+                                       ":now": timestamp, ":missing": "missing", ":rejected": "rejected",
+                                       ":review_rejected": "rejected"},
         )
     try:
         url = _s3(s3).generate_presigned_url(
@@ -238,6 +242,8 @@ def review_document(event: dict[str, Any], *, documents_table: Any | None = None
                                    ":reason": reason.strip() if isinstance(reason, str) else "",
                                    ":verified": "verified"},
     )
+    if decision == "approved" and all_required_approved(employee_id, table=table):
+        _complete_document_stage(employee_id)
     return _response(200, {"employee_id": employee_id, "document_type": doc_type,
                           "review_status": decision, "reviewed_at": timestamp})
 
@@ -311,8 +317,8 @@ def verify_uploaded_object(bucket: str, key: str, *, documents_table: Any | None
                 Message=json.dumps({"employee_id": employee_id, "document_type": doc_type, "reason": "file_validation_failed"}),
             )
         outcome = "rejected"
-    if outcome == "verified" and all_required_verified(employee_id, table=table):
-        _complete_document_stage(employee_id)
+    # File integrity is only the first gate; HR must approve all required documents
+    # before the document-collection workflow callback is submitted.
     return {"ok": outcome == "verified", "employee_id": employee_id, "document_type": doc_type, "status": outcome}
 
 
@@ -325,6 +331,17 @@ def all_required_verified(employee_id: str, *, table: Any) -> bool:
         items.extend(result.get("Items", []))
     states = {item.get("doc_type"): item.get("status") for item in items}
     return all(states.get(doc_type) == "verified" for doc_type in DOCUMENT_TYPES)
+
+
+def all_required_approved(employee_id: str, *, table: Any) -> bool:
+    result = table.query(KeyConditionExpression=Key("employee_id").eq(employee_id), ConsistentRead=True)
+    items = list(result.get("Items", []))
+    while result.get("LastEvaluatedKey"):
+        result = table.query(KeyConditionExpression=Key("employee_id").eq(employee_id), ConsistentRead=True,
+                             ExclusiveStartKey=result["LastEvaluatedKey"])
+        items.extend(result.get("Items", []))
+    states = {item.get("doc_type"): (item.get("status"), item.get("review_status")) for item in items}
+    return all(states.get(doc_type) == ("verified", "approved") for doc_type in DOCUMENT_TYPES)
 
 
 def _complete_document_stage(employee_id: str) -> None:
