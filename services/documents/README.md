@@ -106,10 +106,10 @@ The `s3_key`, bucket name, presigned URL and task token are never returned by th
 1. Validate the internal event, employee ID, caller, document type, content type and file size.
 2. Check the employee record and confirm `caller.sub == employee.cognito_sub` (or trusted HR admin for status listing only).
 3. Generate a random object key under `{employee_id}/{document_type}/`.
-4. Write upload metadata to `hrms-dev-documents` (PK `employee_id`, SK `doc_type`) with `status: missing`.
+4. Write upload metadata to `hrms-team-documents` (PK `employee_id`, SK `doc_type`) with `status: missing`.
 5. Generate a short-lived presigned S3 PUT URL that binds the bucket, object key and exact `Content-Type`.
 6. Return the 201 response above. If URL signing fails, remove the metadata row created for that attempt and fail safely.
-7. S3 `ObjectCreated` invokes the validator. Compare actual object size/content type to metadata and inspect PDF/JPEG/PNG magic bytes. Do not trust only the browser's declared MIME type or filename.
+7. S3 `Object Created` events are routed through EventBridge to invoke the validator. Compare actual object size/content type to metadata and inspect PDF/JPEG/PNG magic bytes. Do not trust only the browser's declared MIME type or filename.
 8. If valid, update status to `verified`. If invalid, set `rejected`, delete the invalid object where possible, and publish an HR SNS notification.
    Both updates must be conditional writes that require the stored `s3_key` to equal the S3 event's object key and the status to still be `missing`. If the condition fails, the event belongs to a superseded attempt or has already been processed; treat it as stale/idempotently ignored and do not change the current record. The successful `verified` update already uses a key condition in the solo reference handler; make the rejection update equally conditional. A prior read comparing `s3_key` is not enough because a retry can replace the key between the read and the write.
 9. Permit a safe retry after an expired unused URL or rejected upload by generating a new random key. Do not allow a new URL for a verified document. If a new attempt replaces an outstanding `missing` attempt, the old URL's eventual S3 event must not update the newly registered document record.
@@ -119,7 +119,7 @@ The browser must send the exact content type in the `required_headers` object wh
 
 ## DynamoDB metadata
 
-Existing table: `hrms-dev-documents`
+Existing table: `hrms-team-documents`
 
 - Partition key: `employee_id`
 - Sort key: `doc_type`
@@ -141,6 +141,6 @@ Tests must mock DynamoDB, S3, SNS and Lambda invocations. Do not deploy or acces
 
 ## Infrastructure
 
-`template.yaml` defines the private encrypted/versioned S3 bucket, S3 object-created trigger, Lambda function, SNS notification topic and IAM permissions. It expects existing employees/documents tables and WP4's stage-handler Lambda. Deploy WP4 first in the later approved AWS integration phase. Set `UploadAllowedOrigin` to the exact employee portal origin; the local default is not the production origin.
+`template.yaml` defines the private encrypted/versioned S3 bucket, EventBridge rule for S3 Object Created events, Lambda function, SNS notification topic and IAM permissions. It expects existing employees/documents tables and WP4's stage-handler Lambda. Deploy WP4 first in the later approved AWS integration phase. Set `UploadAllowedOrigin` to the exact employee portal origin; the local default is not the production origin.
 
 No AWS deployment is part of WP3 local implementation. Never commit AWS credentials, employee documents, JWTs, presigned URLs or Step Functions task tokens.

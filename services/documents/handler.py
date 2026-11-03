@@ -289,8 +289,13 @@ def lambda_handler(event, context):
     # S3 invokes this Lambda asynchronously; failures must reach Lambda so it
     # can retry. Keep API-style error mapping for synchronous WP5 requests.
     if isinstance(event, dict):
-        records = event.get("Records", [])
+        if (
+            event.get("source") == "aws.s3"
+            and event.get("detail-type") == "Object Created"
+        ):
+            return process_s3_upload(event)
 
+        records = event.get("Records", [])
         if (
             isinstance(records, list)
             and records
@@ -371,11 +376,23 @@ def lambda_handler(event, context):
             },
         })
 def extract_s3_upload_details(event):
-    """Extract bucket and object key from an S3 event."""
+    """Extract bucket and object key from S3 or EventBridge S3 events."""
 
     if not isinstance(event, dict):
         raise ValueError("Invalid S3 event")
 
+    if (
+        event.get("source") == "aws.s3"
+        and event.get("detail-type") == "Object Created"
+    ):
+        detail = event.get("detail", {})
+        bucket = detail.get("bucket", {}).get("name")
+        object_key = detail.get("object", {}).get("key")
+        if not bucket or not object_key:
+            raise ValueError("Missing S3 bucket or object key")
+        return bucket, object_key
+
+    # Keep legacy S3 notification records supported for local compatibility.
     records = event.get("Records", [])
 
     if not records:
