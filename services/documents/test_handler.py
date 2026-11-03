@@ -27,6 +27,16 @@ class TestDocumentHandler(unittest.TestCase):
             }]
         }
 
+    def eventbridge_s3_event(self):
+        return {
+            "source": "aws.s3",
+            "detail-type": "Object Created",
+            "detail": {
+                "bucket": {"name": "test-bucket"},
+                "object": {"key": "employee-123/id_proof/test.pdf"},
+            },
+        }
+
     @patch("handler.employees_table")
     @patch("handler.documents_table")
     def test_list_documents(self, mock_documents, mock_employees):
@@ -313,6 +323,19 @@ class TestDocumentHandler(unittest.TestCase):
 
         self.assertTrue(result)
         mock_sns.publish.assert_called_once()
+    def test_extract_eventbridge_s3_upload_details(self):
+        self.assertEqual(
+            handler.extract_s3_upload_details(self.eventbridge_s3_event()),
+            ("test-bucket", "employee-123/id_proof/test.pdf"),
+        )
+
+    @patch("handler.process_s3_upload", return_value=True)
+    def test_lambda_handler_routes_eventbridge_s3_event(self, mock_process):
+        event = self.eventbridge_s3_event()
+        result = handler.lambda_handler(event, None)
+        self.assertTrue(result)
+        mock_process.assert_called_once_with(event)
+
     @patch("handler.process_s3_upload", return_value=True)
     def test_lambda_handler_routes_s3_event(self, mock_process):
         event = {
@@ -329,6 +352,23 @@ class TestDocumentHandler(unittest.TestCase):
 
         self.assertTrue(result)
         mock_process.assert_called_once_with(event)
+
+    @patch("handler.validate_s3_object")
+    @patch("handler.documents_table")
+    def test_process_valid_eventbridge_upload(self, mock_table, mock_validate):
+        mock_table.get_item.return_value = {
+            "Item": {
+                "s3_key": "employee-123/id_proof/test.pdf",
+                "status": "missing",
+                "file_size": 100,
+                "content_type": "application/pdf",
+            }
+        }
+        mock_validate.return_value = True
+        with patch.object(handler, "DOCUMENTS_BUCKET_NAME", "test-bucket"):
+            result = handler.lambda_handler(self.eventbridge_s3_event(), None)
+        self.assertTrue(result)
+        mock_table.update_item.assert_called_once()
 
     def test_s3_unexpected_processing_failure_propagates(self):
         with patch(
