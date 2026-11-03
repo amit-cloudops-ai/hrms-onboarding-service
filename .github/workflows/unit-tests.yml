@@ -58,12 +58,22 @@ jobs:
           cache-dependency-path: |
             frontend/portal/package-lock.json
             frontend/hr-dashboard/package-lock.json
+      - name: Lint employee portal
+        working-directory: frontend/portal
+        run: npm ci && npm run lint
       - name: Build employee portal
         working-directory: frontend/portal
-        run: npm ci && npm run build
+        run: npm run build
+      - name: Lint HR dashboard
+        working-directory: frontend/hr-dashboard
+        run: npm ci && npm run lint
       - name: Build HR dashboard
         working-directory: frontend/hr-dashboard
-        run: npm ci && npm run build
+        run: npm run build
+      - name: Audit production dependencies
+        run: |
+          (cd frontend/portal && npm audit --omit=dev)
+          (cd frontend/hr-dashboard && npm audit --omit=dev)
 
       - name: Validate team CloudFormation infrastructure
         run: |
