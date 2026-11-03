@@ -631,5 +631,32 @@ class TestDocumentHandler(unittest.TestCase):
         mock_table.put_item.assert_called_once()
         mock_table.delete_item.assert_called_once()
 
+
+    @patch("handler.documents_table")
+    def test_all_required_documents_must_be_verified(self, mock_table):
+        mock_table.get_item.side_effect = [
+            {"Item": {"status": "verified"}},
+            {"Item": {"status": "verified"}},
+            {"Item": {"status": "missing"}},
+        ]
+        self.assertFalse(handler.all_required_documents_verified(self.employee_id))
+        self.assertEqual(mock_table.get_item.call_count, 3)
+
+    @patch("handler.boto3.client")
+    def test_resume_document_collection_invokes_wp2_without_task_token(self, mock_client):
+        stream = MagicMock()
+        stream.read.return_value = json.dumps({
+            "ok": True, "employee_id": self.employee_id,
+            "stage": "document_collection", "status": "completion_submitted",
+        }).encode()
+        mock_client.return_value.invoke.return_value = {"Payload": stream}
+        with patch.object(handler, "WORKFLOW_FUNCTION_NAME", "workflow-demo"):
+            result = handler.resume_document_collection(self.employee_id)
+        sent = json.loads(mock_client.return_value.invoke.call_args.kwargs["Payload"])
+        self.assertEqual(sent, {"action": "resume_document_collection", "employee_id": self.employee_id})
+        self.assertNotIn("taskToken", sent)
+        self.assertTrue(result["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

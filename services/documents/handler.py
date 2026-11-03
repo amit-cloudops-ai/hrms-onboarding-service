@@ -18,6 +18,7 @@ EMPLOYEES_TABLE_NAME = os.environ.get("EMPLOYEES_TABLE")
 DOCUMENTS_TABLE_NAME = os.environ.get("DOCUMENTS_TABLE")
 DOCUMENTS_BUCKET_NAME = os.environ.get("DOCUMENTS_BUCKET")
 SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN")
+WORKFLOW_FUNCTION_NAME = os.environ.get("WORKFLOW_FUNCTION_NAME")
 UPLOAD_URL_TTL = int(os.environ.get("UPLOAD_URL_TTL_SECONDS", "300"))
 
 # AWS clients and resources
@@ -552,32 +553,62 @@ def notify_hr_document_rejected(employee_id, document_type):
         raise
 
 
+def all_required_documents_verified(employee_id):
+    """Return true only when all mandatory document records are verified."""
+    if documents_table is None:
+        raise RuntimeError("Documents table is not configured")
+    for document_type in ("id_proof", "degree_certificate", "signed_offer_letter"):
+        response = documents_table.get_item(Key={"employee_id": employee_id, "doc_type": document_type})
+        item = response.get("Item")
+        if not item or item.get("status") != "verified":
+            return False
+    return True
+
+
+def resume_document_collection(employee_id):
+    """Ask WP2 to resume the callback; WP3 never reads or handles task tokens."""
+    function_name = (WORKFLOW_FUNCTION_NAME or os.environ.get("WORKFLOW_FUNCTION_NAME", "")).strip()
+    if not function_name:
+        raise RuntimeError("WORKFLOW_FUNCTION_NAME is not configured")
+    client = boto3.client("lambda")
+    response = client.invoke(
+        FunctionName=function_name,
+        InvocationType="RequestResponse",
+        Payload=json.dumps({"action": "resume_document_collection", "employee_id": employee_id}).encode("utf-8"),
+    )
+    if response.get("FunctionError"):
+        raise RuntimeError("WP2 document callback invocation failed")
+    stream = response.get("Payload")
+    raw = stream.read() if hasattr(stream, "read") else stream
+    try:
+        result = json.loads(raw or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+        raise RuntimeError("WP2 returned an invalid callback response") from exc
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("WP2 did not accept the document completion signal")
+    return result
+
+
 def process_s3_upload(event):
-    """Process uploaded documents and update their validation status."""
-
+    """Validate an upload idempotently and signal WP2 after all required docs pass."""
     bucket, object_key = extract_s3_upload_details(event)
-
     if bucket != DOCUMENTS_BUCKET_NAME:
         raise ValueError("Unexpected S3 bucket")
-
     employee_id, document_type = extract_document_identity(object_key)
-
-    # Retrieve the latest upload metadata.
-    response = documents_table.get_item(
-        Key={
-            "employee_id": employee_id,
-            "doc_type": document_type,
-        }
-    )
-
+    response = documents_table.get_item(Key={"employee_id": employee_id, "doc_type": document_type})
     item = response.get("Item")
+    if not item or item.get("s3_key") != object_key:
+        logger.info("Ignoring stale or unknown upload event")
+        return False
 
-    # Ignore old or unknown upload attempts.
-    if (
-        not item
-        or item.get("s3_key") != object_key
-        or item.get("status") != "missing"
-    ):
+    status = item.get("status")
+    if status == "verified":
+        # A prior attempt may have persisted verification but failed before
+        # notifying WP2. Replayed S3 events safely retry the callback signal.
+        if all_required_documents_verified(employee_id):
+            resume_document_collection(employee_id)
+        return True
+    if status != "missing":
         logger.info("Ignoring stale or duplicate upload event")
         return False
 
@@ -588,39 +619,27 @@ def process_s3_upload(event):
             expected_file_size=item["file_size"],
             expected_content_type=item["content_type"],
         )
-
     except ValueError:
         logger.warning("Document validation failed: %s", object_key)
-
-        updated = mark_document_rejected(
-            employee_id,
-            document_type,
-            object_key,
-        )
-
+        updated = mark_document_rejected(employee_id, document_type, object_key)
         if not updated:
             return False
-
-        # Delete the invalid object.
         try:
-            s3_client.delete_object(
-                Bucket=bucket,
-                Key=object_key,
-            )
+            s3_client.delete_object(Bucket=bucket, Key=object_key)
         except (ClientError, BotoCoreError):
             logger.exception("Could not delete rejected document")
             raise
-
-        notify_hr_document_rejected(
-            employee_id,
-            document_type,
-        )
-
+        notify_hr_document_rejected(employee_id, document_type)
         return True
 
-    # Only mark verified if this is still the latest upload.
-    return mark_document_verified(
-        employee_id,
-        document_type,
-        object_key,
-    )
+    updated = mark_document_verified(employee_id, document_type, object_key)
+    if not updated:
+        latest = documents_table.get_item(
+            Key={"employee_id": employee_id, "doc_type": document_type},
+            ConsistentRead=True,
+        ).get("Item", {})
+        if latest.get("s3_key") != object_key or latest.get("status") != "verified":
+            return False
+    if all_required_documents_verified(employee_id):
+        resume_document_collection(employee_id)
+    return True

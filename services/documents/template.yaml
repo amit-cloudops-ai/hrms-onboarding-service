@@ -13,6 +13,10 @@ Parameters:
     Default: hrms-dev-documents
     Description: Name of the existing documents DynamoDB table
 
+  WorkflowFunctionName:
+    Type: String
+    Description: WP2 workflow support Lambda name used for the trusted document-completion callback.
+
   UploadAllowedOrigin:
     Type: String
     Default: http://localhost:3000
@@ -71,6 +75,7 @@ Resources:
           DOCUMENTS_TABLE: !Ref DocumentsTableName
           DOCUMENTS_BUCKET: !Ref DocumentsBucket
           SNS_TOPIC_ARN: !Ref DocumentRejectedTopic
+          WORKFLOW_FUNCTION_NAME: !Ref WorkflowFunctionName
           UPLOAD_URL_TTL_SECONDS: !Ref UploadUrlTtlSeconds
       Policies:
         - Statement:
@@ -97,6 +102,12 @@ Resources:
                 - s3:DeleteObject
               Resource: !Sub ${DocumentsBucket.Arn}/*
 
+            - Sid: InvokeTrustedWP2Callback
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${WorkflowFunctionName}'
+
             - Sid: NotifyHR
               Effect: Allow
               Action:
@@ -113,6 +124,10 @@ Outputs:
   DocumentsFunctionArn:
     Description: WP3 Lambda function ARN for WP5 integration
     Value: !GetAtt DocumentsFunction.Arn
+
+  DocumentsFunctionName:
+    Description: WP3 Lambda function name for WP5 and event testing
+    Value: !Ref DocumentsFunction
 
   DocumentsBucketName:
     Description: Private document storage bucket

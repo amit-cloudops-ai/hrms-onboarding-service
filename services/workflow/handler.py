@@ -42,9 +42,19 @@ def _callback_ready(item,stage):
 
 def _send_callback(token,employee_id,stage,stepfunctions=None):
     client=stepfunctions or boto3.client("stepfunctions")
-    client.send_task_success(taskToken=token,output=json.dumps({
-        "employee_id":employee_id,"stage":stage,"status":"complete"
-    }))
+    try:
+        client.send_task_success(taskToken=token,output=json.dumps({
+            "employee_id":employee_id,"stage":stage,"status":"complete"
+        }))
+        return True
+    except ClientError as exc:
+        code=exc.response.get("Error",{}).get("Code")
+        if code in {"InvalidToken","TaskDoesNotExist","TaskTimedOut"}:
+            # The callback task may have timed out and be rotating its token.
+            # Readiness remains persisted; the next start_stage invocation
+            # detects it and resumes using the fresh token.
+            return False
+        raise
 
 def start_stage(event,*,table=None,stepfunctions=None,now=None):
     """Start a human/document callback stage; task token never leaves WP2."""
@@ -90,8 +100,9 @@ def resume_document_collection(event,*,table=None,stepfunctions=None):
         return {"ok":True,"employee_id":employee_id,"stage":"document_collection","status":"already_complete"}
     token=item.get("task_token")
     if item.get("status")=="in_progress" and isinstance(token,str) and token:
-        _send_callback(token,employee_id,"document_collection",stepfunctions)
-        return {"ok":True,"employee_id":employee_id,"stage":"document_collection","status":"completion_submitted"}
+        submitted=_send_callback(token,employee_id,"document_collection",stepfunctions)
+        status="completion_submitted" if submitted else "callback_deferred_until_token_refresh"
+        return {"ok":True,"employee_id":employee_id,"stage":"document_collection","status":status}
     return {"ok":True,"employee_id":employee_id,"stage":"document_collection","status":"verified_waiting_for_workflow"}
 
 def start_business_stage(event,*,table=None,now=None):
@@ -105,9 +116,9 @@ def start_business_stage(event,*,table=None,now=None):
         target.update_item(
             Key={"employee_id":employee_id,"stage":stage},
             UpdateExpression="SET #status=:active, started_at=if_not_exists(started_at,:now), correlation_id=:correlation",
-            ConditionExpression="attribute_not_exists(#status) OR #status=:pending OR (#status=:active AND correlation_id=:correlation)",
+            ConditionExpression="attribute_not_exists(#status) OR #status=:pending OR #status=:failed OR (#status=:active AND correlation_id=:correlation)",
             ExpressionAttributeNames={"#status":"status"},
-            ExpressionAttributeValues={":active":"in_progress",":pending":"pending",":now":now or _now(),":correlation":correlation},
+            ExpressionAttributeValues={":active":"in_progress",":pending":"pending",":failed":"failed",":now":now or _now(),":correlation":correlation},
         )
     except ClientError as exc:
         if not _conditional(exc):
