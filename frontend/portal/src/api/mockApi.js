@@ -114,7 +114,7 @@ export async function requestUploadUrl(employeeId, { doc_type, content_type, fil
 }
 
 // Mock-only stand-in for "PUT file to the one-time URL" (real one goes straight to S3).
-export async function uploadToUrl(employeeId, docType, file, uploadUrl) {
+export async function uploadToUrl(employeeId, docType, file) {
   await simulate();
   const row = (documents[employeeId] ?? []).find((d) => d.doc_type === docType);
   if (!row) throw new ApiError('Document type not found.', 404);
