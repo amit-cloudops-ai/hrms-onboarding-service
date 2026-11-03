@@ -9,8 +9,8 @@ function config() {
   const rawDomain = import.meta.env.VITE_COGNITO_DOMAIN || "";
   const domain = rawDomain.startsWith("http") ? rawDomain.replace(/\/$/, "") : (rawDomain ? "https://" + rawDomain.replace(/\/$/, "") : "");
   const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID || "";
-  const redirectUri = import.meta.env.VITE_COGNITO_REDIRECT_URI || window.location.origin;
-  const logoutUri = import.meta.env.VITE_COGNITO_LOGOUT_URI || window.location.origin;
+  const redirectUri = import.meta.env.VITE_COGNITO_REDIRECT_URI || (window.location.origin + "/");
+  const logoutUri = import.meta.env.VITE_COGNITO_LOGOUT_URI || (window.location.origin + "/");
   if (!domain || !clientId) throw new Error("Cognito Hosted UI is not configured. Set VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.");
   return { domain, clientId, redirectUri, logoutUri };
 }
