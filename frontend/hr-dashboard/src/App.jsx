@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import AuthGate from './components/AuthGate';
-import { api, mockSettings } from './api';
+import { api, mockSettings, useMock } from './api';
 import { useAsync } from './hooks/useAsync';
 import { Loading, ErrorState, Empty } from './components/StateViews';
 import EmployeeTable from './components/EmployeeTable';
@@ -98,12 +98,13 @@ function DashboardHome() {
           </>
         )}
 
-        {/* Demo helper for screenshots. Remove before connecting the real API. */}
-        <footer className="demo">
-          <span>Demo controls (mock data):</span>
-          <button onClick={() => { mockSettings.failNext = true; reload(); }}>Simulate error</button>
-          <button onClick={() => { mockSettings.delayMs = mockSettings.delayMs > 600 ? 600 : 3000; }}>Toggle slow network</button>
-        </footer>
+        {useMock && (
+          <footer className="demo">
+            <span>Demo controls (mock data):</span>
+            <button onClick={() => { mockSettings.failNext = true; reload(); }}>Simulate error</button>
+            <button onClick={() => { mockSettings.delayMs = mockSettings.delayMs > 600 ? 600 : 3000; }}>Toggle slow network</button>
+          </footer>
+        )}
       </div>
 
       <RegisterDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onCreated={handleCreated} />

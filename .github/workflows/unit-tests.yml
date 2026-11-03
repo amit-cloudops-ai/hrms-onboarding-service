@@ -49,3 +49,18 @@ jobs:
         run: python -m unittest -v
       - name: WP4 business adapter tests
         run: python -m unittest services.stages.test_stages -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/portal/package-lock.json
+            frontend/hr-dashboard/package-lock.json
+      - name: Build employee portal
+        working-directory: frontend/portal
+        run: npm ci && npm run build
+      - name: Build HR dashboard
+        working-directory: frontend/hr-dashboard
+        run: npm ci && npm run build
