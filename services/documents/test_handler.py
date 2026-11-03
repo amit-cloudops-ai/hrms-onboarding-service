@@ -752,14 +752,11 @@ class TestLegacyS3BatchHandling(unittest.TestCase):
             ]
         }
 
-        with self.assertRaisesRegex(RuntimeError, "record\(s\): 0"):
+        with self.assertRaisesRegex(RuntimeError, r"record\(s\): 0"):
             handler.process_s3_upload(event)
 
         self.assertEqual(mock_process.call_count, 2)
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 class TestEventBridgeS3Events(unittest.TestCase):
     def test_extracts_eventbridge_bucket_and_literal_key(self):
@@ -799,3 +796,5 @@ class TestEventBridgeS3Events(unittest.TestCase):
             handler.extract_s3_upload_details(event)
 
 
+if __name__ == "__main__":
+    unittest.main()
