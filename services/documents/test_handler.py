@@ -90,6 +90,24 @@ class TestDocumentHandler(unittest.TestCase):
         result = handler.lambda_handler(event, None)
 
         self.assertEqual(result["statusCode"], 403)
+    @patch("handler.employees_table")
+    def test_missing_employee_returns_not_found(self, mock_employees):
+        mock_employees.get_item.return_value = {}
+
+        event = {
+            "action": "list_documents",
+            "employee_id": self.employee_id,
+            "caller": self.caller,
+        }
+
+        result = handler.lambda_handler(event, None)
+
+        self.assertEqual(result["statusCode"], 404)
+        self.assertEqual(
+            json.loads(result["body"])["error"]["code"],
+            "NOT_FOUND",
+        )
+
     @patch("handler.s3_client")
     def test_valid_pdf_s3_upload(self, mock_s3):
         mock_s3.get_object.return_value = {
