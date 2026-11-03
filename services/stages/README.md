@@ -51,16 +51,19 @@ secret storage; never commit them.
 
 ## WP2 integration status
 
-The WP2 readiness branch currently documents that its Step Functions state
-machine does **not** invoke the WP4 handler. The team guide describes the
-intended WP2-to-WP4 connection, but the executable event/response contract
-still needs Amit's confirmation. Until that agreement and a workflow-level
-test exist, do not describe the full onboarding flow as end-to-end integrated.
+WP2-to-WP4 workflow integration is not yet verified. Per the team lead's
+direction, WP4 is being finalised against the handler contract implemented
+here. Amit will review the actual input/output and align the WP2 Step Functions
+integration with it; any differences will be resolved during integration and
+tested as a complete workflow.
 
-Proposed handoff for discussion: WP2 invokes this Lambda synchronously with the
-event above, interprets the returned envelope, and only then submits the
-business result through its own callback/lifecycle path. WP4 must never receive
-or persist a Step Functions task token.
+Expected handoff: WP2 invokes this Lambda synchronously with the event above
+and interprets the returned API-style envelope. WP4 performs the business
+action only; WP2 retains ownership of lifecycle state, callback tokens and
+reminders. WP4 must never receive or persist a Step Functions task token.
+
+This repository PR documents the current WP4 contract; it does not claim that
+the complete onboarding workflow is already end-to-end integrated.
 
 ## Tests
 
