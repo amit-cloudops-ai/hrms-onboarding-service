@@ -129,12 +129,12 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(response["statusCode"], 502)
         self.assertNotIn("secret details", response["body"])
 
-    def test_admin_stage_completion_submits_server_side_callback(self):
-        claims = {"email": "hr@example.com", "cognito:groups": ["hr-admins"]}
+    def test_admin_stage_completion_submits_policy_override_callback(self):
+        claims = {"sub": "admin-sub", "email": "hr@example.com", "cognito:groups": ["hr-admins"]}
         req = event(
-            "POST", "/employees/emp-1/stages/document_collection/complete",
+            "POST", "/employees/emp-1/stages/policy_signoff/complete",
             claims=claims,
-            path_params={"employee_id": "emp-1", "stage": "document_collection"},
+            path_params={"employee_id": "emp-1", "stage": "policy_signoff"},
         )
         employees = Mock()
         employees.get_item.return_value = {"Item": {"employee_id": "emp-1"}}
@@ -143,12 +143,26 @@ class ApiResponseTests(unittest.TestCase):
              patch.object(handler, "_stages_table", return_value=stages), \
              patch("services.workflow.callbacks.resume_stage", return_value={
                  "ok": True, "employee_id": "emp-1",
-                 "stage": "document_collection", "status": "completion_submitted",
+                 "stage": "policy_signoff", "status": "completion_submitted",
              }) as resume:
             response = handler.lambda_handler(req, None)
         self.assertEqual(response["statusCode"], 202)
         self.assertTrue(resume.call_args.kwargs["authorized"])
+        self.assertEqual(resume.call_args.args[1], "policy_signoff")
+        self.assertIn("admin_override", stages.update_item.call_args.kwargs["UpdateExpression"])
         self.assertNotIn("task_token", response["body"])
+
+    def test_admin_cannot_bypass_document_validation(self):
+        claims = {"sub": "admin-sub", "email": "hr@example.com", "cognito:groups": ["hr-admins"]}
+        req = event(
+            "POST", "/employees/emp-1/stages/document_collection/complete",
+            claims=claims,
+            path_params={"employee_id": "emp-1", "stage": "document_collection"},
+        )
+        with patch("services.workflow.callbacks.resume_stage") as resume:
+            response = handler.lambda_handler(req, None)
+        self.assertEqual(response["statusCode"], 400)
+        resume.assert_not_called()
 
     def test_non_admin_cannot_submit_stage_completion(self):
         req = event(
