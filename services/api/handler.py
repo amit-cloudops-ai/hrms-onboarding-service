@@ -120,6 +120,23 @@ def _get_employee(employee_id: str, *, table: Any | None = None) -> dict[str, An
     return item if isinstance(item, dict) else None
 
 
+def _get_employee_by_sub(cognito_sub: str, *, table: Any | None = None) -> dict[str, Any] | None:
+    """Resolve the authenticated employee through the Cognito-subject GSI."""
+    if not isinstance(cognito_sub, str) or not cognito_sub.strip():
+        return None
+    target = _employees_table(table)
+    result = target.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(cognito_sub),
+        Limit=2,
+    )
+    matches = result.get("Items", [])
+    if len(matches) > 1:
+        logger.error("Multiple employee records share one Cognito subject.")
+        raise RuntimeError("Employee identity mapping is ambiguous")
+    return matches[0] if matches else None
+
+
 def get_progress(employee_id: str, *, table: Any | None = None) -> dict[str, Any]:
     """Return a stable four-stage progress view, including pending stages."""
     result = _stages_table(table).query(
@@ -237,6 +254,24 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
 
     if not method or not isinstance(path, str):
         return _error(400, "INVALID_EVENT", "Invalid API Gateway request.")
+
+    if method == "GET" and path == "/me":
+        caller_sub = claims.get("sub")
+        if not isinstance(caller_sub, str) or not caller_sub.strip():
+            return _error(401, "UNAUTHORIZED", "A valid Cognito subject is required.")
+        try:
+            employee = _get_employee_by_sub(caller_sub, table=employees_table)
+        except ClientError:
+            logger.exception("Current employee lookup failed.")
+            return _error(502, "DATA_ACCESS_FAILED", "Your employee profile could not be retrieved.")
+        except RuntimeError:
+            return _error(409, "IDENTITY_MAPPING_AMBIGUOUS", "Your account is linked to multiple employee records.")
+        if employee is None:
+            return _error(404, "NOT_FOUND", "No employee record is linked to this account.")
+        employee = dict(employee)
+        employee.pop("execution_arn", None)
+        employee.pop("cognito_sub", None)
+        return _response(200, {"employee": employee})
 
     if method == "POST" and path == "/employees":
         if not admin:

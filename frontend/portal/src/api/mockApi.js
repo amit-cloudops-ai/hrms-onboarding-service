@@ -9,7 +9,7 @@
 
 import { STAGES, DOC_TYPES } from './constants.js';
 import { validateUpload } from './validation.js';
-import { seedEmployees, seedStages, seedDocuments } from './mockData.js';
+import { MOCK_CURRENT_EMPLOYEE_ID, seedEmployees, seedStages, seedDocuments } from './mockData.js';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
@@ -87,6 +87,11 @@ export async function listEmployees() {
 }
 
 // GET /employees/{employee_id}
+export async function getCurrentEmployee() {
+  await simulate();
+  return clone(findEmployee(MOCK_CURRENT_EMPLOYEE_ID));
+}
+
 export async function getEmployee(employeeId) {
   await simulate();
   return clone(findEmployee(employeeId));
@@ -109,7 +114,7 @@ export async function requestUploadUrl(employeeId, { doc_type, content_type, fil
 }
 
 // Mock-only stand-in for "PUT file to the one-time URL" (real one goes straight to S3).
-export async function uploadToUrl(employeeId, docType, file) {
+export async function uploadToUrl(employeeId, docType, file, uploadUrl) {
   await simulate();
   const row = (documents[employeeId] ?? []).find((d) => d.doc_type === docType);
   if (!row) throw new ApiError('Document type not found.', 404);
@@ -144,7 +149,7 @@ export async function signPolicies(employeeId, policy = { policy_id: 'company_po
 export async function completeStage(employeeId, stage) {
   await simulate();
   findEmployee(employeeId);
-  if (!STAGES.includes(stage)) throw new ApiError('Unknown stage.', 400);
+  if (stage !== 'policy_signoff') throw new ApiError('Only policy sign-off supports an HR override.', 400);
   const row = (stages[employeeId] ?? []).find((s) => s.stage === stage);
   if (!row) throw new ApiError('Stage not found.', 404);
   row.status = 'complete';

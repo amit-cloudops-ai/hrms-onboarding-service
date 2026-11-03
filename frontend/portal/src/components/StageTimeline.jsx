@@ -1,7 +1,7 @@
 import { STAGES, STAGE_LABELS } from '../api';
 import { Empty } from './StateViews';
 
-const STATUS_TEXT = { pending: 'Not started', in_progress: 'In progress', complete: 'Done' };
+const STATUS_TEXT = { pending: 'Not started', in_progress: 'In progress', complete: 'Done', failed: 'Needs attention' };
 
 const fmt = (iso) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;

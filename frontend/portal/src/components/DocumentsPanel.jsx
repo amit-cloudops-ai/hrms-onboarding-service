@@ -23,10 +23,10 @@ function DocRow({ employeeId, doc, onChanged }) {
 
     setBusy(true);
     try {
-      await api.requestUploadUrl(employeeId, {
+      const upload = await api.requestUploadUrl(employeeId, {
         doc_type: doc.doc_type, content_type: file.type, file_size: file.size,
       });
-      await api.uploadToUrl(employeeId, doc.doc_type, file);
+      await api.uploadToUrl(employeeId, doc.doc_type, file, upload.upload_url);
       setJustUploaded(true);
       await onChanged();
     } catch (err) {

@@ -5,6 +5,7 @@ Region: us-east-1. All routes sit behind API Gateway with a Cognito authorizer.
 | Method and route | Purpose | Who can call |
 |---|---|---|
 | POST /employees | Register a new hire and start onboarding | HR admin |
+| GET /me | Resolve the authenticated employee by immutable Cognito subject | That employee |
 | GET /employees | List all hires with stage status | HR admin |
 | GET /employees/{employee_id} | One employee profile | HR admin, that employee |
 | GET /employees/{employee_id}/progress | Progress of all four stages | HR admin, that employee |
@@ -14,7 +15,7 @@ Region: us-east-1. All routes sit behind API Gateway with a Cognito authorizer.
 | POST /employees/{employee_id}/stages/{stage}/complete | Manually mark a stage done | HR admin |
 
 Stage names: `document_collection`, `it_provisioning`, `policy_signoff`, `manager_intro`
-Stage status: `pending`, `in_progress`, `complete`
+Stage status: `pending`, `in_progress`, `complete`, `failed`
 Document types: `id_proof`, `degree_certificate`, `signed_offer_letter`
 Uploads: PDF, JPG, PNG; max 5 MB.
 
@@ -149,3 +150,14 @@ Use the existing `hrms-dev-documents` table, with partition key `employee_id` an
 - `validated_at` after verification/rejection
 
 The upload URL request must not mark the document as verified. Metadata is updated only after the S3 event validator checks the uploaded object.
+
+
+## Policy acceptance request
+
+`POST /employees/{employee_id}/policies/sign` requires an explicit JSON body:
+
+```json
+{"policy_id":"company_policy","version":"v1","accepted":true}
+```
+
+WP5 derives the caller's Cognito `sub` from the verified JWT. The browser must never supply the subject. The `company_policy` v1 value is a demo placeholder, not a legally sufficient production policy record.

@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  HRMS team-dev foundation for the mentor evaluation.
+  Creates isolated team DynamoDB tables and Cognito identity resources.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: team
+    AllowedValues:
+      - team
+    Description: Environment suffix for the team integration environment.
+  EnablePointInTimeRecovery:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable DynamoDB point-in-time recovery after reviewing its cost.
+
+  CognitoDomainPrefix:
+    Type: String
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+    Description: Globally unique Cognito managed-login domain prefix for the team environment.
+  CognitoCallbackUrls:
+    Type: CommaDelimitedList
+    Default: 'http://localhost:5173/,http://localhost:5174/'
+    Description: Exact OAuth callback URLs for the portal and HR dashboard.
+  CognitoLogoutUrls:
+    Type: CommaDelimitedList
+    Default: 'http://localhost:5173/,http://localhost:5174/'
+    Description: Exact post-logout URLs for the portal and HR dashboard.
+
+Conditions:
+  UsePointInTimeRecovery: !Equals [!Ref EnablePointInTimeRecovery, 'true']
+
+Resources:
+  EmployeesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-employees'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: cognito_sub
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: cognito-sub-index
+          KeySchema:
+            - AttributeName: cognito_sub
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
+
+  OnboardingStagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-onboarding-stages'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: stage
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+        - AttributeName: stage
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
+
+  DocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-documents'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: employee_id
+          AttributeType: S
+        - AttributeName: doc_type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: employee_id
+          KeyType: HASH
+        - AttributeName: doc_type
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
+
+  EquipmentTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'hrms-${Environment}-equipment'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: asset_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: asset_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [UsePointInTimeRecovery, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: hrms-onboarding-service
+        - Key: Environment
+          Value: !Ref Environment
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'hrms-${Environment}-users'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      # SMS MFA is not configured in this development stack. Enable TOTP MFA separately before production.
+      MfaConfiguration: OPTIONAL
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      UserPoolTags:
+        Project: hrms-onboarding-service
+        Environment: !Ref Environment
+
+  HrAdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: hr-admins
+      Description: HR administrators allowed to manage onboarding records.
+      UserPoolId: !Ref UserPool
+
+  EmployeeGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: Employee
+      Description: Employees allowed to access their own onboarding records.
+      UserPoolId: !Ref UserPool
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref UserPool
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub 'hrms-${Environment}-web-client'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs: !Ref CognitoCallbackUrls
+      LogoutURLs: !Ref CognitoLogoutUrls
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 15
+      IdTokenValidity: 15
+      RefreshTokenValidity: 7
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+Outputs:
+  EmployeesTableName:
+    Description: DynamoDB employee records table.
+    Value: !Ref EmployeesTable
+  OnboardingStagesTableName:
+    Description: DynamoDB onboarding stage table.
+    Value: !Ref OnboardingStagesTable
+  DocumentsTableName:
+    Description: DynamoDB document metadata table.
+    Value: !Ref DocumentsTable
+  EquipmentTableName:
+    Description: DynamoDB equipment inventory table.
+    Value: !Ref EquipmentTable
+  UserPoolId:
+    Description: Cognito user pool ID.
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Public web client ID; it contains no client secret.
+    Value: !Ref UserPoolClient
+  CognitoHostedUiDomain:
+    Description: Cognito managed-login domain for the web applications.
+    Value: !Sub 'https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com'

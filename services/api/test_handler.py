@@ -28,6 +28,31 @@ class ApiResponseTests(unittest.TestCase):
         response = handler.lambda_handler({"rawPath": "/employees", "requestContext": {"http": {"method": "GET"}}}, None)
         self.assertEqual(response["statusCode"], 401)
 
+    def test_current_employee_lookup_uses_cognito_subject_and_hides_internal_fields(self):
+        employees = Mock()
+        employees.query.return_value = {"Items": [{
+            "employee_id": "emp-1",
+            "email": "employee@example.com",
+            "cognito_sub": "cognito-sub-123",
+            "execution_arn": "private-arn",
+        }]}
+        with patch.object(handler, "_employees_table", return_value=employees):
+            response = handler.lambda_handler(event("GET", "/me"), None)
+        self.assertEqual(response["statusCode"], 200)
+        employee = json.loads(response["body"])["employee"]
+        self.assertEqual(employee["employee_id"], "emp-1")
+        employees.query.assert_called_once()
+        self.assertEqual(employees.query.call_args.kwargs["IndexName"], "cognito-sub-index")
+        self.assertNotIn("cognito_sub", employee)
+        self.assertNotIn("execution_arn", employee)
+
+    def test_current_employee_not_found_for_unlinked_cognito_subject(self):
+        employees = Mock()
+        employees.query.return_value = {"Items": []}
+        with patch.object(handler, "_employees_table", return_value=employees):
+            response = handler.lambda_handler(event("GET", "/me"), None)
+        self.assertEqual(response["statusCode"], 404)
+
     def test_non_admin_cannot_list_employees(self):
         response = handler.lambda_handler(event("GET", "/employees"), None)
         self.assertEqual(response["statusCode"], 403)

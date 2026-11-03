@@ -19,7 +19,7 @@ Parameters:
 
   UploadAllowedOrigin:
     Type: String
-    Default: http://localhost:3000
+    Default: http://localhost:5173
     Description: Exact employee portal origin; replace before deployment
 
   UploadUrlTtlSeconds:
@@ -32,6 +32,10 @@ Resources:
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Sub 'hrms-${AWS::AccountId}-${AWS::Region}-hrms-team-documents-documents'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -43,6 +47,12 @@ Resources:
               SSEAlgorithm: AES256
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentDocumentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins:
@@ -55,6 +65,24 @@ Resources:
               - ETag
             MaxAge: 300
 
+  DocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt DocumentsBucket.Arn
+              - !Sub '${DocumentsBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
   DocumentRejectedTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -63,7 +91,7 @@ Resources:
   DocumentsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub hrms-dev-documents-${AWS::StackName}
+      FunctionName: !Sub hrms-team-documents-${AWS::StackName}
       Runtime: python3.12
       Handler: handler.lambda_handler
       CodeUri: .
