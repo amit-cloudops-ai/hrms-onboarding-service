@@ -10,7 +10,7 @@ Parameters:
 
   DocumentsTableName:
     Type: String
-    Default: hrms-dev-documents
+    Default: hrms-team-documents
     Description: Name of the existing documents DynamoDB table
 
   WorkflowFunctionName:
@@ -40,6 +40,9 @@ Resources:
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
       BucketName: !Sub 'hrms-${AWS::AccountId}-${AWS::Region}-hrms-team-documents-documents'
       OwnershipControls:
         Rules:
@@ -104,6 +107,32 @@ Resources:
       Protocol: email
       Endpoint: !Ref NotificationEmail
 
+  DocumentsObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Validate objects uploaded to the team documents bucket
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref DocumentsBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt DocumentsFunction.Arn
+          Id: DocumentsFunctionTarget
+
+  DocumentsFunctionEventBridgePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DocumentsFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DocumentsObjectCreatedRule.Arn
+
   DocumentsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -157,12 +186,6 @@ Resources:
               Action:
                 - sns:Publish
               Resource: !Ref DocumentRejectedTopic
-      Events:
-        DocumentUploaded:
-          Type: S3
-          Properties:
-            Bucket: !Ref DocumentsBucket
-            Events: s3:ObjectCreated:*
 
 Outputs:
   DocumentsFunctionArn:
