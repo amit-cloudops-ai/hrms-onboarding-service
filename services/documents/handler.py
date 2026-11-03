@@ -89,6 +89,10 @@ def validate_upload_input(document):
         raise ValueError("File size must be between 1 byte and 5 MB")
 
     return True
+class EmployeeNotFoundError(Exception):
+    """Raised when the requested employee does not exist."""
+
+
 def validate_employee_access(employee_id, caller, allow_admin=False):
     """Verify the trusted Cognito caller against the employee record."""
 
@@ -110,7 +114,7 @@ def validate_employee_access(employee_id, caller, allow_admin=False):
     employee = response.get("Item")
 
     if not employee:
-        raise ValueError("Employee record not found")
+        raise EmployeeNotFoundError("Employee record not found")
 
     if allow_admin and caller.get("is_admin") is True:
         return True
@@ -330,6 +334,14 @@ def lambda_handler(event, context):
 
         else:
             raise ValueError("Unsupported action")
+    except EmployeeNotFoundError as error:
+        return api_response(404, {
+            "error": {
+                "code": "NOT_FOUND",
+                "message": str(error),
+            },
+        })
+
     except ValueError as error:
         message = str(error)
 
