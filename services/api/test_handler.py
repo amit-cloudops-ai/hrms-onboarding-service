@@ -142,8 +142,8 @@ class ApiResponseTests(unittest.TestCase):
             body={"policy_id": "company_policy", "version": "v1", "accepted": True},
             path_params={"employee_id": "emp-1"},
         )
-        with patch.object(handler, "_employees_table", return_value=employee_table), \\
-             patch.object(handler, "_documents_table", return_value=documents_table), \\
+        with patch.object(handler, "_employees_table", return_value=employee_table), \
+             patch.object(handler, "_documents_table", return_value=documents_table), \
              patch.object(handler, "_invoke_service") as invoke:
             response = handler.lambda_handler(sign, None)
         self.assertEqual(response["statusCode"], 409)
@@ -168,9 +168,9 @@ class ApiResponseTests(unittest.TestCase):
             body={"policy_id": "company_policy", "version": "v1", "accepted": True},
             path_params={"employee_id": "emp-1"},
         )
-        with patch.object(handler, "_employees_table", return_value=employee_table), \\
-             patch.object(handler, "_documents_table", return_value=documents_table), \\
-             patch.object(handler, "_invoke_service", return_value=service_response), \\
+        with patch.object(handler, "_employees_table", return_value=employee_table), \
+             patch.object(handler, "_documents_table", return_value=documents_table), \
+             patch.object(handler, "_invoke_service", return_value=service_response), \
              patch("services.workflow.callbacks.resume_stage", return_value={"status": "resumed"}):
             response = handler.lambda_handler(sign, None)
         self.assertEqual(response["statusCode"], 202)
