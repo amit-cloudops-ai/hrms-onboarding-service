@@ -67,14 +67,36 @@ def _claims(event: dict[str, Any]) -> dict[str, Any]:
 
 def _is_admin(claims: dict[str, Any]) -> bool:
     configured = os.environ.get("HR_ADMIN_GROUP", "hr-admins")
-    groups = claims.get("cognito:groups", [])
+
+    # Cognito emits "cognito:groups". Some JWT consumers expose the same
+    # signed claim with ":" normalised to "_" in their claim map.
+    groups = claims.get("cognito:groups")
+    claim_name = "cognito:groups"
+    if groups is None:
+        groups = claims.get("cognito_groups")
+        claim_name = "cognito_groups"
+
     if isinstance(groups, str):
         try:
             decoded = json.loads(groups)
             groups = decoded if isinstance(decoded, list) else [groups]
         except json.JSONDecodeError:
             groups = [part.strip() for part in groups.split(",") if part.strip()]
-    return isinstance(groups, list) and configured in groups
+
+    allowed = isinstance(groups, list) and configured in groups
+    if not allowed:
+        # Log only the group-claim key/type and safe group names, never tokens
+        # or the full claims object. This makes API Gateway claim mapping
+        # diagnosable without exposing identity data.
+        safe_groups = [g for g in groups if isinstance(g, str)] if isinstance(groups, list) else []
+        logger.warning(
+            "HR admin authorization denied: group_claim=%s group_type=%s groups=%s claim_keys=%s",
+            claim_name,
+            type(groups).__name__,
+            safe_groups,
+            sorted(k for k in claims if "group" in k.lower()),
+        )
+    return allowed
 
 
 def _is_self(claims: dict[str, Any], employee: dict[str, Any]) -> bool:
