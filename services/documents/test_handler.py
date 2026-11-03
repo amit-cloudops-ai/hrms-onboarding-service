@@ -1,5 +1,6 @@
 from botocore.exceptions import ClientError, BotoCoreError
 import json
+from decimal import Decimal
 import os
 import unittest
 from unittest.mock import MagicMock, patch
@@ -65,6 +66,35 @@ class TestDocumentHandler(unittest.TestCase):
 
         for document in response_body["documents"]:
             self.assertEqual(document["status"], "missing")
+
+    @patch("handler.employees_table")
+    @patch("handler.documents_table")
+    def test_list_documents_serializes_dynamodb_decimal_file_size(
+        self, mock_documents, mock_employees
+    ):
+        mock_employees.get_item.return_value = {
+            "Item": {
+                "employee_id": self.employee_id,
+                "cognito_sub": "cognito-user-123",
+            }
+        }
+        mock_documents.get_item.side_effect = [
+            {"Item": {"status": "missing", "file_size": Decimal("1024")}},
+            {},
+            {},
+        ]
+        event = {
+            "action": "list_documents",
+            "employee_id": self.employee_id,
+            "caller": self.caller,
+        }
+
+        result = handler.lambda_handler(event, None)
+
+        self.assertEqual(result["statusCode"], 200)
+        response_body = json.loads(result["body"])
+        self.assertEqual(response_body["documents"][0]["file_size"], 1024)
+        self.assertIsInstance(response_body["documents"][0]["file_size"], int)
 
     def test_invalid_action(self):
         event = {
