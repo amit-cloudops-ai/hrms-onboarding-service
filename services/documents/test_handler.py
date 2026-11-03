@@ -658,5 +658,39 @@ class TestDocumentHandler(unittest.TestCase):
         self.assertEqual(mock_process.call_count, 2)
 
 
+    @patch("handler.notify_hr_document_rejected")
+    @patch("handler.s3_client")
+    @patch("handler.documents_table")
+    def test_retries_cleanup_and_notification_for_rejected_record(
+        self, mock_table, mock_s3, mock_notify
+    ):
+        object_key = "employee-123/id_proof/test.pdf"
+        mock_table.get_item.return_value = {
+            "Item": {
+                "s3_key": object_key,
+                "status": "rejected",
+            }
+        }
+        event = {
+            "Records": [{
+                "eventSource": "aws:s3",
+                "s3": {
+                    "bucket": {"name": "test-bucket"},
+                    "object": {"key": object_key},
+                },
+            }]
+        }
+
+        with patch.object(handler, "DOCUMENTS_BUCKET_NAME", "test-bucket"):
+            result = handler.process_s3_upload(event)
+
+        self.assertTrue(result)
+        mock_s3.delete_object.assert_called_once_with(
+            Bucket="test-bucket",
+            Key=object_key,
+        )
+        mock_notify.assert_called_once_with("employee-123", "id_proof")
+
+
 if __name__ == "__main__":
     unittest.main()
