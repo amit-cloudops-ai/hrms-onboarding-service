@@ -170,6 +170,7 @@ class ApiResponseTests(unittest.TestCase):
         )
         with patch.object(handler, "_employees_table", return_value=employee_table), \
              patch.object(handler, "_documents_table", return_value=documents_table), \
+             patch.object(handler, "_stages_table", return_value=Mock()), \
              patch.object(handler, "_invoke_service", return_value=service_response), \
              patch("services.workflow.callbacks.resume_stage", return_value={"status": "resumed"}):
             response = handler.lambda_handler(sign, None)
