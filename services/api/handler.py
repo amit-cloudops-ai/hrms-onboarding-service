@@ -407,6 +407,22 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(400, "INVALID_REQUEST", str(exc))
         if payload.get("accepted") is not True:
             return _error(400, "INVALID_REQUEST", "Explicit policy acceptance is required.")
+        # Enforce document verification server-side; browser controls are not a security boundary.
+        required_documents = ("id_proof", "degree_certificate", "signed_offer_letter")
+        document_table = _documents_table(documents_table)
+        for document_type in required_documents:
+            document_result = document_table.get_item(
+                Key={"employee_id": employee_id, "doc_type": document_type},
+                ConsistentRead=True,
+            )
+            document = document_result.get("Item") or {}
+            if document.get("status") != "verified":
+                return _error(
+                    409,
+                    "DOCUMENTS_NOT_VERIFIED",
+                    "All required documents must be verified before policy sign-off.",
+                )
+
         service_response = _invoke_service(os.environ.get("STAGES_FUNCTION_NAME", ""), {
             "action": "sign_policy", "employee_id": employee_id,
             "caller": {"sub": claims.get("sub")}, "policy": payload,
