@@ -631,5 +631,32 @@ class TestDocumentHandler(unittest.TestCase):
         mock_table.put_item.assert_called_once()
         mock_table.delete_item.assert_called_once()
 
+    @patch("handler.process_single_s3_upload", side_effect=[True, True])
+    def test_processes_every_s3_record_in_batch(self, mock_process):
+        event = {
+            "Records": [
+                {
+                    "eventSource": "aws:s3",
+                    "s3": {
+                        "bucket": {"name": "test-bucket"},
+                        "object": {"key": "employee-123/id_proof/one.pdf"},
+                    },
+                },
+                {
+                    "eventSource": "aws:s3",
+                    "s3": {
+                        "bucket": {"name": "test-bucket"},
+                        "object": {"key": "employee-123/degree_certificate/two.pdf"},
+                    },
+                },
+            ]
+        }
+
+        result = handler.process_s3_upload(event)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_process.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
