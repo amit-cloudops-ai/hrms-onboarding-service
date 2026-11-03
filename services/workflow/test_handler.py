@@ -58,7 +58,7 @@ class BusinessStageTests(unittest.TestCase):
     def test_failure_state_is_correlation_bound(self):
         table=Mock()
         mark_stage_failed({"employee_id":"emp-1","stage":"manager_intro","correlation_id":"exec:manager_intro"},table=table)
-        self.assertIn("correlation_id = :correlation",table.update_item.call_args.kwargs["ConditionExpression"])
+        self.assertIn("correlation_id=:correlation",table.update_item.call_args.kwargs["ConditionExpression"])
 
 class CompletionAndReminderTests(unittest.TestCase):
     def test_callback_completion_requires_token(self):
