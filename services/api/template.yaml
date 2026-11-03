@@ -53,7 +53,7 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: hrms-dev-api
+      FunctionName: hrms-dev-api-team
       CodeUri: ../..
       Handler: services.api.handler.lambda_handler
       Runtime: python3.12
@@ -121,6 +121,12 @@ Resources:
                 Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
               - !Ref AWS::NoValue
       Events:
+        GetCurrentEmployee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /me
+            Method: GET
         CreateEmployee:
           Type: HttpApi
           Properties:
