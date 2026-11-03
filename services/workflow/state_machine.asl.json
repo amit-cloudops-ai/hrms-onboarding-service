@@ -1,5 +1,5 @@
 {
-  "Comment": "HRMS team onboarding: document callback followed by synchronous WP4 business stages.",
+  "Comment": "HRMS team onboarding: document and policy callbacks, synchronous WP4 provisioning and manager introduction.",
   "StartAt": "WaitForDocuments",
   "States": {
     "WaitForDocuments": {
@@ -52,19 +52,6 @@
         }
       },
       "ResultPath": null,
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 2,
-          "BackoffRate": 2,
-          "MaxAttempts": 3
-        }
-      ],
       "Next": "WaitForDocuments"
     },
     "MarkDocumentsComplete": {
@@ -201,12 +188,7 @@
         {
           "Variable": "$.current_stage",
           "StringEquals": "it_provisioning",
-          "Next": "SetPolicySignoff"
-        },
-        {
-          "Variable": "$.current_stage",
-          "StringEquals": "policy_signoff",
-          "Next": "SetManagerIntro"
+          "Next": "WaitForPolicySignoff"
         },
         {
           "Variable": "$.current_stage",
@@ -216,14 +198,71 @@
       ],
       "Default": "InvalidStage"
     },
-    "SetPolicySignoff": {
-      "Type": "Pass",
+    "WaitForPolicySignoff": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
-        "employee_id.$": "$.employee_id",
-        "current_stage": "policy_signoff",
-        "correlation_id.$": "States.Format('{}:{}', $$.Execution.Id, 'policy_signoff')"
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "start_stage",
+          "employee_id.$": "$.employee_id",
+          "stage": "policy_signoff",
+          "taskToken.$": "$$.Task.Token"
+        }
       },
-      "Next": "StartBusinessStage"
+      "TimeoutSeconds": 86400,
+      "ResultPath": "$.policy_callback",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.policy_timeout",
+          "Next": "SendPolicyReminder"
+        }
+      ],
+      "Next": "MarkPolicySignoffComplete"
+    },
+    "SendPolicyReminder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "send_reminder",
+          "employee_id.$": "$.employee_id",
+          "stage": "policy_signoff"
+        }
+      },
+      "ResultPath": null,
+      "Next": "WaitForPolicySignoff"
+    },
+    "MarkPolicySignoffComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "mark_stage_complete",
+          "employee_id.$": "$.employee_id",
+          "stage": "policy_signoff"
+        }
+      },
+      "ResultPath": null,
+      "Next": "SetManagerIntro"
     },
     "SetManagerIntro": {
       "Type": "Pass",

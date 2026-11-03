@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: HRMS WP2 team onboarding workflow with document callback and synchronous WP4 stages.
+Description: HRMS WP2 team onboarding workflow with human callbacks and synchronous WP4 stages.
 Parameters:
   StagesTableName:
     Type: String
@@ -48,6 +48,10 @@ Resources:
               Resource:
                 - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
                 - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}:*'
+            - Sid: ResumeCallbackTasks
+              Effect: Allow
+              Action: [states:SendTaskSuccess]
+              Resource: '*'
   OnboardingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
