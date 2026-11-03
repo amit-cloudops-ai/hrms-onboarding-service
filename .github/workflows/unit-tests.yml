@@ -58,12 +58,22 @@ jobs:
           cache-dependency-path: |
             frontend/portal/package-lock.json
             frontend/hr-dashboard/package-lock.json
+      - name: Lint employee portal
+        working-directory: frontend/portal
+        run: npm ci && npm run lint
       - name: Build employee portal
         working-directory: frontend/portal
-        run: npm ci && npm run build
+        run: npm run build
+      - name: Lint HR dashboard
+        working-directory: frontend/hr-dashboard
+        run: npm ci && npm run lint
       - name: Build HR dashboard
         working-directory: frontend/hr-dashboard
-        run: npm ci && npm run build
+        run: npm run build
+      - name: Audit production dependencies
+        run: |
+          (cd frontend/portal && npm audit --omit=dev)
+          (cd frontend/hr-dashboard && npm audit --omit=dev)
 
       - name: Validate team CloudFormation infrastructure
         run: |
@@ -77,3 +87,18 @@ jobs:
           sam build --template-file services/workflow/template.yaml --build-dir /tmp/sam-wp2
           sam build --template-file services/documents/template.yaml --build-dir /tmp/sam-wp3
           sam build --template-file services/api/template.yaml --build-dir /tmp/sam-api
+
+      - name: Report frontend dependency audit findings
+        run: |
+          (cd frontend/portal && npm audit --json > /tmp/portal-audit.json || true)
+          (cd frontend/hr-dashboard && npm audit --json > /tmp/dashboard-audit.json || true)
+          node - <<'NODE'
+          const fs = require('node:fs');
+          for (const file of ['/tmp/portal-audit.json', '/tmp/dashboard-audit.json']) {
+            const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+            console.log(file, report.metadata?.vulnerabilities || {});
+            for (const [name, item] of Object.entries(report.vulnerabilities || {})) {
+              console.log(name, item.severity, 'direct=' + item.isDirect, 'range=' + item.range, 'fix=' + JSON.stringify(item.fixAvailable));
+            }
+          }
+          NODE
