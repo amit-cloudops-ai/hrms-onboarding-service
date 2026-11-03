@@ -22,11 +22,19 @@ Parameters:
     Default: http://localhost:5173
     Description: Exact employee portal origin; replace before deployment
 
+  NotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional HR administrator email for rejected-document alerts.
+
   UploadUrlTtlSeconds:
     Type: Number
     Default: 300
     MinValue: 1
     MaxValue: 604800
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
 
 Resources:
   DocumentsBucket:
@@ -87,6 +95,14 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: WP3 rejected document notifications
+
+  RejectedDocumentEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      TopicArn: !Ref DocumentRejectedTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
 
   DocumentsFunction:
     Type: AWS::Serverless::Function
