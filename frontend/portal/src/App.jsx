@@ -45,7 +45,7 @@ function PortalHome() {
               </section>
               <section className="panel" aria-labelledby="h-policy">
                 <h2 id="h-policy">Policy sign-off</h2>
-                <PolicyPanel employeeId={data.employee.employee_id} stage={data.stages.find((s) => s.stage === "policy_signoff")} onSigned={refresh} />
+                <PolicyPanel employeeId={data.employee.employee_id} stage={data.stages.find((s) => s.stage === "policy_signoff")} documents={data.documents} onSigned={refresh} />
               </section>
             </div>
           </main>
