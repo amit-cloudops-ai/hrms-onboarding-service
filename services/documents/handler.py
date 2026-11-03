@@ -289,8 +289,14 @@ def list_documents(employee_id):
 def lambda_handler(event, context):
     """Main entry point for the WP3 document service."""
 
-    # S3 invokes this Lambda asynchronously; failures must reach Lambda so it
-    # can retry. Keep API-style error mapping for synchronous WP5 requests.
+    # S3/EventBridge invokes this Lambda asynchronously; failures must reach
+    # Lambda so it can retry. Keep API-style mapping for synchronous WP5 calls.
+    if isinstance(event, dict) and (
+        event.get("source") == "aws.s3"
+        and event.get("detail-type") == "Object Created"
+    ):
+        return process_s3_upload(event)
+
     if isinstance(event, dict):
         records = event.get("Records", [])
 
@@ -390,6 +396,20 @@ def extract_s3_upload_details(event, record=None):
     if not isinstance(event, dict):
         raise ValueError("Invalid S3 event")
 
+    # EventBridge S3 Object Created events carry the key as the literal key.
+    # Do not URL-decode this form: a '+' may be part of the real object key.
+    if (
+        event.get("source") == "aws.s3"
+        and event.get("detail-type") == "Object Created"
+    ):
+        detail = event.get("detail", {})
+        bucket = detail.get("bucket", {}).get("name")
+        object_key = detail.get("object", {}).get("key")
+        if not bucket or not object_key:
+            raise ValueError("Missing S3 bucket or object key")
+        return bucket, object_key
+
+    # Retain compatibility with legacy S3 notification records.
     if record is None:
         records = event.get("Records", [])
         if not records:
@@ -402,12 +422,10 @@ def extract_s3_upload_details(event, record=None):
     s3_details = record.get("s3", {})
     bucket = s3_details.get("bucket", {}).get("name")
     object_key = s3_details.get("object", {}).get("key")
-
     if not bucket or not object_key:
         raise ValueError("Missing S3 bucket or object key")
 
     from urllib.parse import unquote_plus
-
     return bucket, unquote_plus(object_key)
 def extract_document_identity(object_key):
     """Extract employee ID and document type from an S3 object key."""
@@ -568,6 +586,13 @@ def notify_hr_document_rejected(employee_id, document_type):
 
 def process_s3_upload(event):
     """Process every S3 record; let Lambda retry the batch if any fails."""
+
+    if (
+        isinstance(event, dict)
+        and event.get("source") == "aws.s3"
+        and event.get("detail-type") == "Object Created"
+    ):
+        return process_single_s3_upload(event, None)
 
     records = event.get("Records", []) if isinstance(event, dict) else []
     if not records:
