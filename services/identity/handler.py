@@ -199,6 +199,23 @@ def create_employee(
             "Could not create the employee's Cognito identity."
         ) from exc
 
+    try:
+        cognito.admin_add_user_to_group(
+            UserPoolId=pool_id,
+            Username=employee["email"],
+            GroupName="Employee",
+        )
+    except ClientError as exc:
+        try:
+            cognito.admin_delete_user(UserPoolId=pool_id, Username=employee["email"])
+        except ClientError:
+            logging.getLogger(__name__).error("Cognito cleanup failed after employee-group assignment failure.")
+        try:
+            table.delete_item(Key={"employee_id": new_id})
+        except ClientError:
+            logging.getLogger(__name__).error("Employee cleanup failed after employee-group assignment failure.")
+        raise IdentityError("Could not assign the employee to the Employee Cognito group.") from exc
+
     # Cognito's immutable sub claim is the authorization key for self-service.
     # Do not fall back to email: email can change and is not a stable subject ID.
     cognito_user = cognito_result.get("User", {}) if isinstance(cognito_result, dict) else {}
