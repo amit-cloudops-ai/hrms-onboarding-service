@@ -39,6 +39,9 @@ Resources:
               SSEAlgorithm: AES256
       VersioningConfiguration:
         Status: Enabled
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins:
@@ -55,6 +58,32 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: WP3 rejected document notifications
+
+  DocumentsObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Validate objects uploaded to the WP3 documents bucket
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref DocumentsBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt DocumentsFunction.Arn
+          Id: DocumentsFunctionTarget
+
+  DocumentsFunctionEventBridgePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DocumentsFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DocumentsObjectCreatedRule.Arn
 
   DocumentsFunction:
     Type: AWS::Serverless::Function
@@ -102,12 +131,7 @@ Resources:
               Action:
                 - sns:Publish
               Resource: !Ref DocumentRejectedTopic
-      Events:
-        DocumentUploaded:
-          Type: S3
-          Properties:
-            Bucket: !Ref DocumentsBucket
-            Events: s3:ObjectCreated:*
+
 
 Outputs:
   DocumentsFunctionArn:
