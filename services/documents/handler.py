@@ -414,6 +414,11 @@ def extract_s3_upload_details(event, record=None):
         records = event.get("Records", [])
         if not records:
             raise ValueError("No S3 records found")
+        if len(records) != 1:
+            raise ValueError(
+                "An explicit record is required when an S3 event contains "
+                "multiple records"
+            )
         record = records[0]
 
     if not isinstance(record, dict) or record.get("eventSource") != "aws:s3":
