@@ -13,11 +13,28 @@ Parameters:
     Default: simulated
     AllowedValues: [simulated, real]
     Description: Deployment-controlled mode. Real mode requires approved provider adapters.
+  NotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional HR administrator email for workflow reminder notifications.
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+
 Resources:
   WorkflowReminderTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: hrms-team-onboarding-reminders
+
+  WorkflowReminderEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+      TopicArn: !Ref WorkflowReminderTopic
+
   WorkflowFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -52,6 +69,7 @@ Resources:
               Effect: Allow
               Action: [states:SendTaskSuccess]
               Resource: '*'
+
   OnboardingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -63,6 +81,7 @@ Resources:
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref WorkflowFunction
+
 Outputs:
   StateMachineArn:
     Description: Team development onboarding state machine ARN.
