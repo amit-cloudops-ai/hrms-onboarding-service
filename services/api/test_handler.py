@@ -272,5 +272,14 @@ class ApiResponseTests(unittest.TestCase):
         table.delete_item.assert_called_once_with(Key={"employee_id": "emp-1"})
 
 
+    def test_admin_group_alias_can_list_employees(self):
+        table = Mock()
+        table.scan.return_value = {"Items": []}
+        claims = {"cognito_groups": json.dumps(["hr-admins"])}
+        with patch.object(handler, "_employees_table", return_value=table):
+            response = handler.lambda_handler(event("GET", "/employees", claims=claims), None)
+        self.assertEqual(response["statusCode"], 200)
+
+
 if __name__ == "__main__":
     unittest.main()
