@@ -712,3 +712,42 @@ class TestDocumentHandler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestEventBridgeS3Events(unittest.TestCase):
+    def test_extracts_eventbridge_bucket_and_literal_key(self):
+        event = {
+            "source": "aws.s3",
+            "detail-type": "Object Created",
+            "detail": {
+                "bucket": {"name": "test-bucket"},
+                "object": {"key": "employee-123/id_proof/file+name.pdf"},
+            },
+        }
+        self.assertEqual(
+            handler.extract_s3_upload_details(event),
+            ("test-bucket", "employee-123/id_proof/file+name.pdf"),
+        )
+
+    def test_lambda_routes_eventbridge_object_created_event(self):
+        event = {
+            "source": "aws.s3",
+            "detail-type": "Object Created",
+            "detail": {
+                "bucket": {"name": "test-bucket"},
+                "object": {"key": "employee-123/id_proof/test.pdf"},
+            },
+        }
+        with patch("handler.process_s3_upload", return_value=True) as process:
+            self.assertTrue(handler.lambda_handler(event, None))
+        process.assert_called_once_with(event)
+
+    def test_rejects_incomplete_eventbridge_detail(self):
+        event = {
+            "source": "aws.s3",
+            "detail-type": "Object Created",
+            "detail": {"bucket": {"name": "test-bucket"}, "object": {}},
+        }
+        with self.assertRaisesRegex(ValueError, "Missing S3 bucket or object key"):
+            handler.extract_s3_upload_details(event)
+
+
