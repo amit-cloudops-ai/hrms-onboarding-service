@@ -81,7 +81,7 @@ WP4 returns business-operation results only. It must not write `status`, `starte
 
 - Policy sign-off is a human callback stage owned by WP2, not an automatic simulated WP4 stage.
 - WP5 authenticates the employee by immutable Cognito sub and invokes WP4 action sign_policy with a versioned acceptance.
-- WP4 records only the policy_acceptances attribute on the policy-signoff row; it never changes WP2 lifecycle status or task tokens.
+- WP4 records only the policy_id, policy_version, policy_accepted, policy_accepted_at, and policy_accepted_by attributes on the policy-signoff row; it never changes WP2 lifecycle status or task tokens.
 - WP5 submits the policy-signoff callback when its token exists. If the workflow has not reached that stage yet, WP2 detects the saved acceptance when it creates the callback token and resumes safely.
 - The demo uses company_policy v1 as a placeholder acknowledgement. Production must render the actual policy text/version and retain complete audit evidence.
 

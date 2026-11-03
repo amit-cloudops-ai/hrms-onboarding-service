@@ -37,8 +37,7 @@ def _conditional(exc):
 def _callback_ready(item,stage):
     if stage=="document_collection":
         return item.get("documents_verified") is True
-    acceptances=item.get("policy_acceptances",{})
-    return isinstance(acceptances,dict) and any(isinstance(v,dict) and v.get("accepted") is True for v in acceptances.values())
+    return item.get("policy_accepted") is True
 
 def _send_callback(token,employee_id,stage,stepfunctions=None):
     client=stepfunctions or boto3.client("stepfunctions")

@@ -26,12 +26,12 @@ class TestPolicyAcceptance(unittest.TestCase):
     def test_records_acceptance_without_lifecycle_update(self):
         result=record_policy_acceptance(self.event,table=self.table,now="2026-11-03T12:00:00Z")
         kw=self.table.update_item.call_args.kwargs
-        self.assertEqual(result["status"],"accepted"); self.assertIn("policy_acceptances",kw["ExpressionAttributeNames"].values()); self.assertNotIn("#status",kw["UpdateExpression"])
+        self.assertEqual(result["status"],"accepted"); self.assertIn("policy_accepted",kw["UpdateExpression"]); self.assertNotIn("#status",kw["UpdateExpression"])
     def test_requires_cognito_sub(self):
         with self.assertRaisesRegex(ValueError,"Cognito subject"): record_policy_acceptance({**self.event,"caller":{}},table=self.table)
     def test_requires_explicit_acceptance(self):
         with self.assertRaisesRegex(ValueError,"Explicit"): record_policy_acceptance({**self.event,"policy":{**self.event["policy"],"accepted":False}},table=self.table)
     def test_idempotent(self):
-        self.table.get_item.return_value={"Item":{"policy_acceptances":{"company_policy":{"version":"v1","cognito_sub":"cognito-sub-1","accepted":True}}}}
+        self.table.get_item.return_value={"Item":{"policy_id":"company_policy","policy_version":"v1","policy_accepted":True,"policy_accepted_by":"cognito-sub-1"}}
         result=record_policy_acceptance(self.event,table=self.table); self.assertTrue(result["already_accepted"]); self.table.update_item.assert_not_called()
 if __name__=="__main__": unittest.main()
