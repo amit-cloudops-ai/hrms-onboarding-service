@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: WP4 synchronous onboarding business-stage adapter.
+Parameters:
+  Mode:
+    Type: String
+    Default: simulated
+    AllowedValues: [simulated, real]
+    Description: Deployment-controlled adapter mode; real providers are not yet configured.
+Resources:
+  StageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.12
+      Handler: services.stages.handler.lambda_handler
+      CodeUri: ../..
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          MODE: !Ref Mode
+Outputs:
+  StagesFunctionName:
+    Description: WP4 Lambda function name for WP2 and WP5.
+    Value: !Ref StageFunction
+  StagesFunctionArn:
+    Description: WP4 Lambda function ARN.
+    Value: !GetAtt StageFunction.Arn

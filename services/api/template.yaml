@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP5 HTTP API (template only; not deployed).
+
+Parameters:
+  CognitoUserPoolId:
+    Type: String
+    Description: Existing Cognito user pool ID in this AWS region.
+  CognitoAppClientId:
+    Type: String
+    Description: Existing Cognito app client ID accepted by the JWT authorizer.
+  EmployeesTableName:
+    Type: String
+    Default: hrms-dev-employees
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
+  DocumentsTableName:
+    Type: String
+    Default: hrms-dev-documents
+  StateMachineArn:
+    Type: String
+    Description: ARN of the separately managed WP2 state machine.
+  DocumentsFunctionName:
+    Type: String
+    Description: Required document adapter Lambda name. Supply the deployed adapter when deploying the API.
+  StagesFunctionName:
+    Type: String
+    Description: Required policy/stage adapter Lambda name. Supply the deployed adapter when deploying the API.
+  HrAdminGroup:
+    Type: String
+    Default: hr-admins
+
+Conditions:
+  HasDocumentsFunction: !Not [!Equals [!Ref DocumentsFunctionName, '']]
+  HasStagesFunction: !Not [!Equals [!Ref StagesFunctionName, '']]
+
+Resources:
+  OnboardingApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      Auth:
+        DefaultAuthorizer: CognitoJwtAuthorizer
+        Authorizers:
+          CognitoJwtAuthorizer:
+            IdentitySource: '$request.header.Authorization'
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPoolId}'
+              audience:
+                - !Ref CognitoAppClientId
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: hrms-dev-api
+      CodeUri: ../..
+      Handler: services.api.handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          STAGES_TABLE: !Ref StagesTableName
+          DOCUMENTS_TABLE: !Ref DocumentsTableName
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          STATE_MACHINE_ARN: !Ref StateMachineArn
+          DOCUMENTS_FUNCTION_NAME: !Ref DocumentsFunctionName
+          STAGES_FUNCTION_NAME: !Ref StagesFunctionName
+          HR_ADMIN_GROUP: !Ref HrAdminGroup
+      Policies:
+        - Statement:
+            - Sid: ReadAndWriteEmployeeRecords
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
+            - Sid: ReadStageProgressAndCallbacks
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
+            - Sid: StartWorkflowExecution
+              Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref StateMachineArn
+            - Sid: SubmitWorkflowCallback
+              Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+              # SendTaskSuccess is authorized by task token and requires wildcard resource scope.
+              Resource: '*'
+            - Sid: ManageCognitoEmployeeIdentity
+              Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminDeleteUser
+              Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
+            - !If
+              - HasDocumentsFunction
+              - Sid: InvokeDocumentAdapter
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${DocumentsFunctionName}'
+              - !Ref AWS::NoValue
+            - !If
+              - HasStagesFunction
+              - Sid: InvokeStageAdapter
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+              - !Ref AWS::NoValue
+      Events:
+        CreateEmployee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees
+            Method: POST
+        ListEmployees:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees
+            Method: GET
+        GetEmployee:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}
+            Method: GET
+        GetProgress:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/progress
+            Method: GET
+        GetDocuments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/documents
+            Method: GET
+        CreateUploadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/documents/upload-url
+            Method: POST
+        SignPolicies:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/policies/sign
+            Method: POST
+        CompleteStage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref OnboardingApi
+            Path: /employees/{employee_id}/stages/{stage}/complete
+            Method: POST
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API endpoint (available only after a separately approved deployment).
+    Value: !Sub 'https://${OnboardingApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'

@@ -1,0 +1,246 @@
+{
+  "Comment": "HRMS team onboarding: document callback followed by synchronous WP4 business stages.",
+  "StartAt": "WaitForDocuments",
+  "States": {
+    "WaitForDocuments": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "start_stage",
+          "employee_id.$": "$.employee_id",
+          "stage": "document_collection",
+          "taskToken.$": "$$.Task.Token"
+        }
+      },
+      "TimeoutSeconds": 86400,
+      "ResultPath": "$.document_callback",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "ResultPath": "$.timeout_error",
+          "Next": "SendDocumentReminder"
+        }
+      ],
+      "Next": "MarkDocumentsComplete"
+    },
+    "SendDocumentReminder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "send_reminder",
+          "employee_id.$": "$.employee_id",
+          "stage": "document_collection"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "WaitForDocuments"
+    },
+    "MarkDocumentsComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "mark_stage_complete",
+          "employee_id.$": "$.employee_id",
+          "stage": "document_collection"
+        }
+      },
+      "ResultPath": null,
+      "Next": "SetITProvisioning"
+    },
+    "SetITProvisioning": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "it_provisioning",
+        "correlation_id.$": "States.Format('{}:{}', $$.Execution.Id, 'it_provisioning')"
+      },
+      "Next": "StartBusinessStage"
+    },
+    "StartBusinessStage": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "start_business_stage",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage",
+          "correlation_id.$": "$.correlation_id"
+        }
+      },
+      "ResultPath": "$.stage_start",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "ExecuteBusinessStage"
+    },
+    "ExecuteBusinessStage": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "execute_business_stage",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage",
+          "correlation_id.$": "$.correlation_id"
+        }
+      },
+      "ResultSelector": {
+        "business_result.$": "$.Payload"
+      },
+      "ResultPath": "$.business_execution",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.stage_error",
+          "Next": "MarkBusinessStageFailed"
+        }
+      ],
+      "Next": "MarkBusinessStageComplete"
+    },
+    "MarkBusinessStageComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "mark_stage_complete",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage",
+          "correlation_id.$": "$.correlation_id"
+        }
+      },
+      "ResultPath": null,
+      "Next": "SelectNextStage"
+    },
+    "MarkBusinessStageFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "mark_stage_failed",
+          "employee_id.$": "$.employee_id",
+          "stage.$": "$.current_stage",
+          "correlation_id.$": "$.correlation_id",
+          "error_code.$": "$.stage_error.Error"
+        }
+      },
+      "ResultPath": null,
+      "Next": "BusinessStageFailed"
+    },
+    "BusinessStageFailed": {
+      "Type": "Fail",
+      "Error": "BusinessStageFailed",
+      "Cause": "A WP4 business stage could not be completed."
+    },
+    "SelectNextStage": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "it_provisioning",
+          "Next": "SetPolicySignoff"
+        },
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "policy_signoff",
+          "Next": "SetManagerIntro"
+        },
+        {
+          "Variable": "$.current_stage",
+          "StringEquals": "manager_intro",
+          "Next": "WorkflowComplete"
+        }
+      ],
+      "Default": "InvalidStage"
+    },
+    "SetPolicySignoff": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "policy_signoff",
+        "correlation_id.$": "States.Format('{}:{}', $$.Execution.Id, 'policy_signoff')"
+      },
+      "Next": "StartBusinessStage"
+    },
+    "SetManagerIntro": {
+      "Type": "Pass",
+      "Parameters": {
+        "employee_id.$": "$.employee_id",
+        "current_stage": "manager_intro",
+        "correlation_id.$": "States.Format('{}:{}', $$.Execution.Id, 'manager_intro')"
+      },
+      "Next": "StartBusinessStage"
+    },
+    "InvalidStage": {
+      "Type": "Fail",
+      "Error": "InvalidStage",
+      "Cause": "Unsupported onboarding stage."
+    },
+    "WorkflowComplete": {
+      "Type": "Succeed"
+    }
+  }
+}

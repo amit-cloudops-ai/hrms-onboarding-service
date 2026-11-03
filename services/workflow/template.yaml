@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP2 team onboarding workflow with document callback and synchronous WP4 stages.
+Parameters:
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
+  StagesFunctionName:
+    Type: String
+    Description: WP4 Lambda function name returned by the WP4 stack.
+  Mode:
+    Type: String
+    Default: simulated
+    AllowedValues: [simulated, real]
+    Description: Deployment-controlled mode. Real mode requires approved provider adapters.
+Resources:
+  WorkflowReminderTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: hrms-dev-onboarding-reminders-team
+  WorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      CodeUri: .
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          STAGES_TABLE: !Ref StagesTableName
+          REMINDER_TOPIC_ARN: !Ref WorkflowReminderTopic
+          STAGES_FUNCTION_NAME: !Ref StagesFunctionName
+          MODE: !Ref Mode
+      Policies:
+        - Statement:
+            - Sid: ReadAndUpdateCanonicalStageRecords
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
+            - Sid: PublishWorkflowReminders
+              Effect: Allow
+              Action: [sns:Publish]
+              Resource: !Ref WorkflowReminderTopic
+            - Sid: InvokeWP4BusinessHandler
+              Effect: Allow
+              Action: [lambda:InvokeFunction]
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+                - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}:*'
+  OnboardingStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: hrms-dev-onboarding-team
+      Type: STANDARD
+      DefinitionUri: state_machine.asl.json
+      DefinitionSubstitutions:
+        WorkflowFunctionArn: !GetAtt WorkflowFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowFunction
+Outputs:
+  StateMachineArn:
+    Description: Team development onboarding state machine ARN.
+    Value: !Ref OnboardingStateMachine
+  WorkflowFunctionName:
+    Description: WP2 workflow support Lambda name.
+    Value: !Ref WorkflowFunction
+  ReminderTopicArn:
+    Description: Team development reminder topic ARN.
+    Value: !Ref WorkflowReminderTopic
