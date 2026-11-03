@@ -46,7 +46,12 @@ export async function getProgress(employeeId) {
 }
 export async function listDocuments(employeeId) {
   const data = await request("/employees/" + encodeURIComponent(employeeId) + "/documents");
-  return data.documents || [];
+  // WP3's public response uses document_type; the portal components use doc_type.
+  // Normalize at the API boundary so upload controls always receive a known type.
+  return (data.documents || []).map((document) => ({
+    ...document,
+    doc_type: document.doc_type || document.document_type,
+  }));
 }
 export async function requestUploadUrl(employeeId, document) {
   const data = await request("/employees/" + encodeURIComponent(employeeId) + "/documents/upload-url", {
