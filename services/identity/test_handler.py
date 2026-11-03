@@ -115,6 +115,9 @@ class CreateEmployeeTests(unittest.TestCase):
         self.assertEqual(item["email"], "asha.rao@example.com")
         self.assertEqual(item["status"], "in_progress")
         self.cognito.admin_create_user.assert_called_once()
+        self.cognito.admin_add_user_to_group.assert_called_once_with(
+            UserPoolId="us-east-1_testpool", Username="asha.rao@example.com", GroupName="Employee"
+        )
         self.table.update_item.assert_called_once()
         self.assertEqual(
             self.table.update_item.call_args.kwargs["ExpressionAttributeValues"][":sub"],
@@ -125,6 +128,20 @@ class CreateEmployeeTests(unittest.TestCase):
         self.assertEqual(cognito_args["UserPoolId"], "us-east-1_testpool")
         self.assertEqual(result["employee_id"], "employee-test-123")
         self.assertNotIn("temporary_password", result)
+
+    def test_cleans_up_if_employee_group_assignment_fails(self):
+        self.cognito.admin_add_user_to_group.side_effect = client_error()
+        with self.assertRaisesRegex(IdentityError, "Employee Cognito group"):
+            create_employee(
+                self.payload, table=self.table, cognito=self.cognito,
+                user_pool_id="us-east-1_testpool", employee_id="employee-test-123",
+            )
+        self.cognito.admin_delete_user.assert_called_once_with(
+            UserPoolId="us-east-1_testpool", Username="asha.rao@example.com"
+        )
+        self.table.delete_item.assert_called_once_with(
+            Key={"employee_id": "employee-test-123"}
+        )
 
     def test_does_not_create_cognito_user_if_dynamodb_write_fails(self):
         self.table.put_item.side_effect = client_error()

@@ -19,7 +19,7 @@ COGNITO_DOMAIN_PREFIX="hrms-team-924422830139" \
 bash infra/deploy-team-dev.sh
 ```
 
-The script checks the AWS account, asks for an explicit DEPLOY confirmation, creates hosting first, then deploys foundation → WP4 → WP2 → WP3 → WP5, builds both frontends with Cognito/API configuration, uploads static assets and invalidates CloudFront.
+The script checks the AWS account, asks for an explicit DEPLOY confirmation, creates the two plain CloudFormation foundation/hosting stacks, then deploys WP4 → WP2 → WP3 → WP5 with SAM. It builds both frontends with Cognito/API configuration, uploads static assets and invalidates CloudFront. The script is guarded against a wrong account, missing stack outputs and accidental stack updates.
 
 Cognito domain prefixes are globally unique. If the suggested prefix is taken, choose another lowercase prefix. If stacks already exist after a partial deployment, inspect them first; set ALLOW_STACK_UPDATES=true only when intentionally updating those stacks.
 

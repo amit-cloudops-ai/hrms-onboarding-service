@@ -64,3 +64,16 @@ jobs:
       - name: Build HR dashboard
         working-directory: frontend/hr-dashboard
         run: npm ci && npm run build
+
+      - name: Validate team CloudFormation infrastructure
+        run: |
+          python -m pip install --upgrade cfn-lint
+          cfn-lint infra/team-dev-foundation.yaml infra/team-dev-hosting.yaml
+      - name: Validate deployment script syntax
+        run: bash -n infra/deploy-team-dev.sh
+      - name: Build all backend SAM applications without deploying
+        run: |
+          sam build --template-file services/stages/template.yaml --build-dir /tmp/sam-wp4
+          sam build --template-file services/workflow/template.yaml --build-dir /tmp/sam-wp2
+          sam build --template-file services/documents/template.yaml --build-dir /tmp/sam-wp3
+          sam build --template-file services/api/template.yaml --build-dir /tmp/sam-api

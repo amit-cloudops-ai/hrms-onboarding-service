@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REGION="\${AWS_REGION:-us-east-1}"
-EXPECTED_ACCOUNT_ID="\${EXPECTED_AWS_ACCOUNT_ID:-924422830139}"
+REGION="${AWS_REGION:-us-east-1}"
+EXPECTED_ACCOUNT_ID="${EXPECTED_AWS_ACCOUNT_ID:-924422830139}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 if [[ "$ACCOUNT_ID" != "$EXPECTED_ACCOUNT_ID" ]]; then
   echo "Refusing deployment: expected AWS account $EXPECTED_ACCOUNT_ID, authenticated to $ACCOUNT_ID." >&2
   exit 1
 fi
-COGNITO_DOMAIN_PREFIX="\${COGNITO_DOMAIN_PREFIX:-hrms-team-$ACCOUNT_ID}"
-HR_ADMIN_EMAIL="\${HR_ADMIN_EMAIL:?Set HR_ADMIN_EMAIL to the team HR administrator email.}"
-ALLOW_STACK_UPDATES="\${ALLOW_STACK_UPDATES:-false}"
-ENABLE_POINT_IN_TIME_RECOVERY="\${ENABLE_POINT_IN_TIME_RECOVERY:-false}"
+COGNITO_DOMAIN_PREFIX="${COGNITO_DOMAIN_PREFIX:-hrms-team-$ACCOUNT_ID}"
+HR_ADMIN_EMAIL="${HR_ADMIN_EMAIL:?Set HR_ADMIN_EMAIL to the team HR administrator email.}"
+ALLOW_STACK_UPDATES="${ALLOW_STACK_UPDATES:-false}"
+ENABLE_POINT_IN_TIME_RECOVERY="${ENABLE_POINT_IN_TIME_RECOVERY:-false}"
 stack_exists(){ aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" >/dev/null 2>&1; }
 guard_stack(){ if stack_exists "$1" && [[ "$ALLOW_STACK_UPDATES" != "true" ]]; then echo "Stack $1 exists. Inspect it first; set ALLOW_STACK_UPDATES=true only for an intentional update." >&2; exit 1; fi; }
-stack_output(){ aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue | [0]" --output text; }
+stack_output(){ local value; value="$(aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue | [0]" --output text)"; if [[ -z "$value" || "$value" == "None" ]]; then echo "Missing CloudFormation output $2 from stack $1." >&2; return 1; fi; printf "%s\n" "$value"; }
 deploy_sam(){
   local template="$1" build_dir="$2" stack="$3"; shift 3
   guard_stack "$stack"
@@ -26,7 +26,7 @@ read -r -p "Type DEPLOY to create the isolated team environment: " answer
 [[ "$answer" == "DEPLOY" ]] || { echo "Cancelled."; exit 1; }
 
 guard_stack hrms-team-hosting
-sam deploy --template-file infra/team-dev-hosting.yaml --stack-name hrms-team-hosting --region "$REGION" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Environment=team
+aws cloudformation deploy --template-file infra/team-dev-hosting.yaml --stack-name hrms-team-hosting --region "$REGION" --no-fail-on-empty-changeset --parameter-overrides Environment=team
 PORTAL_BUCKET="$(stack_output hrms-team-hosting PortalBucketName)"
 PORTAL_DISTRIBUTION="$(stack_output hrms-team-hosting PortalDistributionId)"
 PORTAL_ORIGIN="$(stack_output hrms-team-hosting PortalUrl)"
@@ -36,7 +36,7 @@ DASHBOARD_ORIGIN="$(stack_output hrms-team-hosting DashboardUrl)"
 CALLBACK_URLS="$PORTAL_ORIGIN/,$DASHBOARD_ORIGIN/"
 
 guard_stack hrms-team-foundation
-sam deploy --template-file infra/team-dev-foundation.yaml --stack-name hrms-team-foundation --region "$REGION" --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides Environment=team EnablePointInTimeRecovery="$ENABLE_POINT_IN_TIME_RECOVERY" CognitoDomainPrefix="$COGNITO_DOMAIN_PREFIX" CognitoCallbackUrls="$CALLBACK_URLS" CognitoLogoutUrls="$CALLBACK_URLS"
+aws cloudformation deploy --template-file infra/team-dev-foundation.yaml --stack-name hrms-team-foundation --region "$REGION" --no-fail-on-empty-changeset --parameter-overrides Environment=team EnablePointInTimeRecovery="$ENABLE_POINT_IN_TIME_RECOVERY" CognitoDomainPrefix="$COGNITO_DOMAIN_PREFIX" CognitoCallbackUrls="$CALLBACK_URLS" CognitoLogoutUrls="$CALLBACK_URLS"
 EMPLOYEES_TABLE="$(stack_output hrms-team-foundation EmployeesTableName)"
 STAGES_TABLE="$(stack_output hrms-team-foundation OnboardingStagesTableName)"
 DOCUMENTS_TABLE="$(stack_output hrms-team-foundation DocumentsTableName)"
@@ -53,7 +53,7 @@ deploy_sam services/documents/template.yaml .aws-sam/team-wp3 hrms-team-wp3 Empl
 DOCUMENTS_FUNCTION_NAME="$(stack_output hrms-team-wp3 DocumentsFunctionName)"
 DOCUMENTS_BUCKET="$(stack_output hrms-team-wp3 DocumentsBucketName)"
 deploy_sam services/api/template.yaml .aws-sam/team-api hrms-team-api CognitoUserPoolId="$USER_POOL_ID" CognitoAppClientId="$USER_POOL_CLIENT_ID" EmployeesTableName="$EMPLOYEES_TABLE" StagesTableName="$STAGES_TABLE" DocumentsTableName="$DOCUMENTS_TABLE" StateMachineArn="$STATE_MACHINE_ARN" DocumentsFunctionName="$DOCUMENTS_FUNCTION_NAME" StagesFunctionName="$STAGES_FUNCTION_NAME" PortalOrigin="$PORTAL_ORIGIN" DashboardOrigin="$DASHBOARD_ORIGIN"
-API_URL="$(stack_output hrms-team-api ApiUrl)"
+API_URL="$(stack_output hrms-team-api ApiEndpoint)"
 
 if ! aws cognito-idp admin-get-user --user-pool-id "$USER_POOL_ID" --username "$HR_ADMIN_EMAIL" --region "$REGION" >/dev/null 2>&1; then
   aws cognito-idp admin-create-user --user-pool-id "$USER_POOL_ID" --username "$HR_ADMIN_EMAIL" --user-attributes Name=email,Value="$HR_ADMIN_EMAIL" Name=email_verified,Value=true --desired-delivery-mediums EMAIL --region "$REGION"
