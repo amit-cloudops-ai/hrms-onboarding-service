@@ -164,8 +164,8 @@ Resources:
           RequireSymbols: true
       # SMS MFA is not configured in this development stack. Enable TOTP MFA separately before production.
       MfaConfiguration: OPTIONAL
-      SoftwareTokenMfaConfiguration:
-        Enabled: true
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email

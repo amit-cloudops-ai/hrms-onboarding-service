@@ -67,7 +67,7 @@ jobs:
 
       - name: Validate team CloudFormation infrastructure
         run: |
-          python -m pip install --upgrade cfn-lint
+          python -m pip install 'cfn-lint>=1.52,<1.59'
           cfn-lint infra/team-dev-foundation.yaml infra/team-dev-hosting.yaml
       - name: Validate deployment script syntax
         run: bash -n infra/deploy-team-dev.sh
