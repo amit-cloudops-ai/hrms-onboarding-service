@@ -293,8 +293,11 @@ def lambda_handler(event, context):
         if (
             isinstance(records, list)
             and records
-            and isinstance(records[0], dict)
-            and records[0].get("eventSource") == "aws:s3"
+            and any(
+                isinstance(record, dict)
+                and record.get("eventSource") == "aws:s3"
+                for record in records
+            )
         ):
             return process_s3_upload(event)
 
@@ -369,20 +372,19 @@ def lambda_handler(event, context):
                 "message": "Unable to process the document request.",
             },
         })
-def extract_s3_upload_details(event):
-    """Extract bucket and object key from an S3 event."""
+def extract_s3_upload_details(event, record=None):
+    """Extract bucket and object key from one S3 event record."""
 
     if not isinstance(event, dict):
         raise ValueError("Invalid S3 event")
 
-    records = event.get("Records", [])
+    if record is None:
+        records = event.get("Records", [])
+        if not records:
+            raise ValueError("No S3 records found")
+        record = records[0]
 
-    if not records:
-        raise ValueError("No S3 records found")
-
-    record = records[0]
-
-    if record.get("eventSource") != "aws:s3":
+    if not isinstance(record, dict) or record.get("eventSource") != "aws:s3":
         raise ValueError("Unsupported event source")
 
     s3_details = record.get("s3", {})
@@ -553,9 +555,41 @@ def notify_hr_document_rejected(employee_id, document_type):
 
 
 def process_s3_upload(event):
-    """Process uploaded documents and update their validation status."""
+    """Process every S3 record; let Lambda retry the batch if any fails."""
 
-    bucket, object_key = extract_s3_upload_details(event)
+    records = event.get("Records", []) if isinstance(event, dict) else []
+    if not records:
+        raise ValueError("No S3 records found")
+
+    results = []
+    failures = []
+
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or record.get("eventSource") != "aws:s3":
+            logger.warning("Skipping unsupported S3 event record at index %s", index)
+            continue
+        try:
+            results.append(process_single_s3_upload(event, record))
+        except Exception:
+            logger.exception("Failed to process S3 event record at index %s", index)
+            failures.append(index)
+
+    if failures:
+        # S3 invokes Lambda asynchronously. Raising allows the event to be
+        # retried; already completed records are safe because processing is
+        # guarded by the current S3 key and DynamoDB status.
+        raise RuntimeError(
+            "Failed to process S3 event record(s): "
+            + ", ".join(str(index) for index in failures)
+        )
+
+    return all(results)
+
+
+def process_single_s3_upload(event, record):
+    """Process one uploaded document and update its validation status."""
+
+    bucket, object_key = extract_s3_upload_details(event, record)
 
     if bucket != DOCUMENTS_BUCKET_NAME:
         raise ValueError("Unexpected S3 bucket")
