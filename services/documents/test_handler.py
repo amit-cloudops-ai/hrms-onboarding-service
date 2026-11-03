@@ -710,6 +710,54 @@ class TestDocumentHandler(unittest.TestCase):
         mock_notify.assert_called_once_with("employee-123", "id_proof")
 
 
+class TestLegacyS3BatchHandling(unittest.TestCase):
+    def test_extractor_requires_explicit_record_for_multi_record_event(self):
+        event = {
+            "Records": [
+                {
+                    "eventSource": "aws:s3",
+                    "s3": {
+                        "bucket": {"name": "test-bucket"},
+                        "object": {"key": "employee-123/id_proof/one.pdf"},
+                    },
+                },
+                {
+                    "eventSource": "aws:s3",
+                    "s3": {
+                        "bucket": {"name": "test-bucket"},
+                        "object": {"key": "employee-123/degree_certificate/two.pdf"},
+                    },
+                },
+            ]
+        }
+
+        with self.assertRaisesRegex(ValueError, "explicit record"):
+            handler.extract_s3_upload_details(event)
+
+    @patch("handler.process_single_s3_upload", side_effect=[
+        ValueError("malformed S3 record"),
+        True,
+    ])
+    def test_batch_continues_after_bad_record_then_surfaces_failure(self, mock_process):
+        event = {
+            "Records": [
+                {"eventSource": "aws:s3", "s3": {}},
+                {
+                    "eventSource": "aws:s3",
+                    "s3": {
+                        "bucket": {"name": "test-bucket"},
+                        "object": {"key": "employee-123/degree_certificate/two.pdf"},
+                    },
+                },
+            ]
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "record\(s\): 0"):
+            handler.process_s3_upload(event)
+
+        self.assertEqual(mock_process.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
 
