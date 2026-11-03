@@ -1,12 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: WP4 synchronous onboarding business-stage adapter.
+Description: WP4 synchronous business adapter and policy acceptance service.
 Parameters:
   Mode:
     Type: String
     Default: simulated
     AllowedValues: [simulated, real]
-    Description: Deployment-controlled adapter mode; real providers are not yet configured.
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
 Resources:
   StageFunction:
     Type: AWS::Serverless::Function
@@ -19,6 +21,13 @@ Resources:
       Environment:
         Variables:
           MODE: !Ref Mode
+          STAGES_TABLE: !Ref StagesTableName
+      Policies:
+        - Statement:
+            - Sid: RecordPolicyAcceptanceOnly
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
 Outputs:
   StagesFunctionName:
     Description: WP4 Lambda function name for WP2 and WP5.

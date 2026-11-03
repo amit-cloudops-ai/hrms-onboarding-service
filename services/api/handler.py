@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import boto3
@@ -318,7 +319,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(403, "FORBIDDEN", "You cannot access these documents.")
         return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
             "action": "list_documents", "employee_id": employee_id,
-            "caller": {"email": claims.get("email"), "is_admin": admin},
+            "caller": {"sub": claims.get("sub"), "email": claims.get("email"), "is_admin": admin},
         })
 
     if method == "POST" and isinstance(employee_id, str) and path == f"/employees/{employee_id}/documents/upload-url":
@@ -333,7 +334,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             return _error(400, "INVALID_REQUEST", str(exc))
         return _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
             "action": "create_upload_url", "employee_id": employee_id,
-            "caller": {"email": claims.get("email"), "is_admin": False},
+            "caller": {"sub": claims.get("sub"), "email": claims.get("email"), "is_admin": False},
             "document": payload,
         })
 
@@ -347,24 +348,51 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             payload = _json_body(event)
         except ValueError as exc:
             return _error(400, "INVALID_REQUEST", str(exc))
-        return _invoke_service(os.environ.get("STAGES_FUNCTION_NAME", ""), {
+        if payload.get("accepted") is not True:
+            return _error(400, "INVALID_REQUEST", "Explicit policy acceptance is required.")
+        service_response = _invoke_service(os.environ.get("STAGES_FUNCTION_NAME", ""), {
             "action": "sign_policy", "employee_id": employee_id,
-            "caller": {"email": claims.get("email")}, "policy": payload,
+            "caller": {"sub": claims.get("sub")}, "policy": payload,
         })
+        if service_response.get("statusCode", 500) >= 400:
+            return service_response
+        try:
+            from services.workflow.callbacks import CallbackConflict, resume_stage
+            callback = resume_stage(
+                employee_id, "policy_signoff", authorized=True,
+                table=_stages_table(stages_table),
+            )
+        except ValueError:
+            callback = {"status": "accepted_waiting_for_policy_stage"}
+        except CallbackConflict:
+            callback = {"status": "callback_already_expired_or_submitted"}
+        return _response(202, {"policy": json.loads(service_response.get("body", "{}")), "workflow": callback})
 
     if method == "POST" and isinstance(employee_id, str) and path.startswith(f"/employees/{employee_id}/stages/") and path.endswith("/complete"):
         if not admin:
             return _error(403, "FORBIDDEN", "HR administrator access is required.")
         stage = path[len(f"/employees/{employee_id}/stages/"):-len("/complete")].strip("/")
-        if stage not in STAGES:
-            return _error(400, "INVALID_STAGE", "Unsupported onboarding stage.")
+        if stage != "policy_signoff":
+            return _error(400, "INVALID_STAGE", "Only policy_signoff supports an HR callback override.")
         if _get_employee(employee_id, table=employees_table) is None:
             return _error(404, "NOT_FOUND", "Employee was not found.")
         try:
+            stage_table = _stages_table(stages_table)
+            stage_table.update_item(
+                Key={"employee_id": employee_id, "stage": stage},
+                UpdateExpression="SET admin_override = :yes, admin_override_by = :sub, admin_override_at = :now",
+                ConditionExpression="#status = :active",
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":yes": True, ":sub": claims.get("sub"),
+                    ":now": datetime.now(timezone.utc).isoformat(),
+                    ":active": "in_progress",
+                },
+            )
             from services.workflow.callbacks import CallbackConflict, resume_stage
             result = resume_stage(
                 employee_id, stage, authorized=True,
-                table=_stages_table(stages_table),
+                table=stage_table,
             )
             return _response(202, result)
         except CallbackConflict:

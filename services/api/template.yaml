@@ -85,6 +85,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:Query
+                - dynamodb:UpdateItem
               Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
             - Sid: StartWorkflowExecution
               Effect: Allow

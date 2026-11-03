@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 
-// NOTE: the contract only has POST /employees/{id}/policies/sign (no policy text/list).
-// We show a single acceptance. Ask Amit if individual policies must be listed.
+// Demo acknowledgement only. Production must render the full policy text and retain its versioned audit evidence.
 export default function PolicyPanel({ employeeId, stage, onSigned }) {
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -13,7 +12,7 @@ export default function PolicyPanel({ employeeId, stage, onSigned }) {
     setBusy(true);
     setError(null);
     try {
-      await api.signPolicies(employeeId);
+      await api.signPolicies(employeeId, { policy_id: 'company_policy', version: 'v1', accepted: true });
       await onSigned();
     } catch (err) {
       setError(err.message || 'Could not record your sign-off. Please try again.');

@@ -128,9 +128,10 @@ export async function listDocuments(employeeId) {
 }
 
 // POST /employees/{employee_id}/policies/sign  (that employee)
-export async function signPolicies(employeeId) {
+export async function signPolicies(employeeId, policy = { policy_id: 'company_policy', version: 'v1', accepted: true }) {
   await simulate();
   findEmployee(employeeId);
+  if (policy?.accepted !== true || !policy?.policy_id || !policy?.version) throw new ApiError('Explicit policy acceptance is required.', 400);
   const row = (stages[employeeId] ?? []).find((s) => s.stage === 'policy_signoff');
   if (!row) throw new ApiError('Stage not found.', 404);
   row.status = 'complete';
