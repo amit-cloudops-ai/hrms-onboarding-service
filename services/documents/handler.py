@@ -606,12 +606,19 @@ def process_single_s3_upload(event, record):
 
     item = response.get("Item")
 
-    # Ignore old or unknown upload attempts.
-    if (
-        not item
-        or item.get("s3_key") != object_key
-        or item.get("status") != "missing"
-    ):
+    # Ignore old or unknown upload attempts. A rejected record for the
+    # same key is different: a previous invocation may have failed during
+    # object cleanup or HR notification, so retry those side effects.
+    if not item or item.get("s3_key") != object_key:
+        logger.info("Ignoring stale or unknown upload event")
+        return False
+
+    if item.get("status") == "rejected":
+        s3_client.delete_object(Bucket=bucket, Key=object_key)
+        notify_hr_document_rejected(employee_id, document_type)
+        return True
+
+    if item.get("status") != "missing":
         logger.info("Ignoring stale or duplicate upload event")
         return False
 
