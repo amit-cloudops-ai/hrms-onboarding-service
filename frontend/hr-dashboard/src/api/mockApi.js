@@ -143,7 +143,7 @@ export async function signPolicies(employeeId) {
 export async function completeStage(employeeId, stage) {
   await simulate();
   findEmployee(employeeId);
-  if (!STAGES.includes(stage)) throw new ApiError('Unknown stage.', 400);
+  if (stage !== 'policy_signoff') throw new ApiError('Only policy sign-off supports an HR override.', 400);
   const row = (stages[employeeId] ?? []).find((s) => s.stage === stage);
   if (!row) throw new ApiError('Stage not found.', 404);
   row.status = 'complete';

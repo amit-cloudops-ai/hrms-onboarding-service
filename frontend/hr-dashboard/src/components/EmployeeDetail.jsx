@@ -4,7 +4,7 @@ import { useAsync } from '../hooks/useAsync';
 import { Loading, ErrorState } from './StateViews';
 import { fmtDate, kb, orderStages } from '../format';
 
-const STAGE_TEXT = { pending: 'Not started', in_progress: 'In progress', complete: 'Done' };
+const STAGE_TEXT = { pending: 'Not started', in_progress: 'In progress', complete: 'Done', failed: 'Needs attention' };
 const DOC_TEXT = { missing: 'Missing', uploaded: 'Uploaded', verified: 'Verified', rejected: 'Rejected' };
 
 // NOTE: the contract has no route for HR to verify/reject documents, so documents are read-only here.
@@ -61,7 +61,7 @@ export default function EmployeeDetail({ employee, onChanged, onClose }) {
                   <span className={`badge badge-${s.status}`}>{STAGE_TEXT[s.status]}</span>
                   {s.completed_at && <span className="sub"> {fmtDate(s.completed_at)}</span>}
                 </div>
-                {s.status !== 'complete' && (
+                {s.stage === 'policy_signoff' && s.status === 'in_progress' && (
                   confirming === s.stage ? (
                     <span className="actions">
                       <button className="btn btn-primary" disabled={busy === s.stage} onClick={() => complete(s.stage)}>

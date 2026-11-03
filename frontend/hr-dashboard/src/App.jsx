@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import AuthGate from './components/AuthGate';
 import { api, mockSettings } from './api';
 import { useAsync } from './hooks/useAsync';
 import { Loading, ErrorState, Empty } from './components/StateViews';
@@ -7,7 +8,7 @@ import EmployeeDetail from './components/EmployeeDetail';
 import RegisterDialog from './components/RegisterDialog';
 import './App.css';
 
-export default function App() {
+function DashboardHome() {
   const { data: employees, error, loading, reload } = useAsync(api.listEmployees);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
@@ -109,3 +110,5 @@ export default function App() {
     </>
   );
 }
+
+export default function App() { return <AuthGate><DashboardHome /></AuthGate>; }
