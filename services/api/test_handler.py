@@ -122,6 +122,60 @@ class ApiResponseTests(unittest.TestCase):
         self.assertEqual(sign_response["statusCode"], 403)
         invoke.assert_not_called()
 
+    def test_policy_signoff_is_blocked_until_all_required_documents_are_verified(self):
+        employee_table = Mock()
+        employee_table.get_item.return_value = {
+            "Item": {
+                "employee_id": "emp-1",
+                "email": "employee@example.com",
+                "cognito_sub": "cognito-sub-123",
+            }
+        }
+        documents_table = Mock()
+        documents_table.get_item.side_effect = [
+            {"Item": {"status": "verified"}},
+            {"Item": {"status": "uploaded"}},
+            {"Item": {"status": "verified"}},
+        ]
+        sign = event(
+            "POST", "/employees/emp-1/policies/sign",
+            body={"policy_id": "company_policy", "version": "v1", "accepted": True},
+            path_params={"employee_id": "emp-1"},
+        )
+        with patch.object(handler, "_employees_table", return_value=employee_table), \\
+             patch.object(handler, "_documents_table", return_value=documents_table), \\
+             patch.object(handler, "_invoke_service") as invoke:
+            response = handler.lambda_handler(sign, None)
+        self.assertEqual(response["statusCode"], 409)
+        self.assertEqual(json.loads(response["body"])["error"]["code"], "DOCUMENTS_NOT_VERIFIED")
+        self.assertEqual(documents_table.get_item.call_count, 2)
+        invoke.assert_not_called()
+
+    def test_policy_signoff_proceeds_only_after_all_required_documents_are_verified(self):
+        employee_table = Mock()
+        employee_table.get_item.return_value = {
+            "Item": {
+                "employee_id": "emp-1",
+                "email": "employee@example.com",
+                "cognito_sub": "cognito-sub-123",
+            }
+        }
+        documents_table = Mock()
+        documents_table.get_item.return_value = {"Item": {"status": "verified"}}
+        service_response = {"statusCode": 200, "body": json.dumps({"accepted": True})}
+        sign = event(
+            "POST", "/employees/emp-1/policies/sign",
+            body={"policy_id": "company_policy", "version": "v1", "accepted": True},
+            path_params={"employee_id": "emp-1"},
+        )
+        with patch.object(handler, "_employees_table", return_value=employee_table), \\
+             patch.object(handler, "_documents_table", return_value=documents_table), \\
+             patch.object(handler, "_invoke_service", return_value=service_response), \\
+             patch("services.workflow.callbacks.resume_stage", return_value={"status": "resumed"}):
+            response = handler.lambda_handler(sign, None)
+        self.assertEqual(response["statusCode"], 202)
+        self.assertEqual(documents_table.get_item.call_count, 3)
+
     def test_employee_list_does_not_leak_internal_identity_or_execution_fields(self):
         employees = Mock()
         employees.scan.return_value = {"Items": [{
