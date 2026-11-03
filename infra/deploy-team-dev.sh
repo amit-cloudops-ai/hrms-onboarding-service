@@ -46,7 +46,7 @@ COGNITO_DOMAIN="$(stack_output hrms-team-foundation CognitoHostedUiDomain)"
 
 deploy_sam services/stages/template.yaml .aws-sam/team-wp4 hrms-team-wp4 Mode=simulated StagesTableName="$STAGES_TABLE"
 STAGES_FUNCTION_NAME="$(stack_output hrms-team-wp4 StagesFunctionName)"
-deploy_sam services/workflow/template.yaml .aws-sam/team-wp2 hrms-team-wp2 Mode=simulated StagesTableName="$STAGES_TABLE" StagesFunctionName="$STAGES_FUNCTION_NAME"
+deploy_sam services/workflow/template.yaml .aws-sam/team-wp2 hrms-team-wp2 Mode=simulated StagesTableName="$STAGES_TABLE" StagesFunctionName="$STAGES_FUNCTION_NAME" NotificationEmail="$HR_ADMIN_EMAIL"
 STATE_MACHINE_ARN="$(stack_output hrms-team-wp2 StateMachineArn)"
 WORKFLOW_FUNCTION_NAME="$(stack_output hrms-team-wp2 WorkflowFunctionName)"
 deploy_sam services/documents/template.yaml .aws-sam/team-wp3 hrms-team-wp3 EmployeesTableName="$EMPLOYEES_TABLE" DocumentsTableName="$DOCUMENTS_TABLE" WorkflowFunctionName="$WORKFLOW_FUNCTION_NAME" UploadAllowedOrigin="$PORTAL_ORIGIN"
