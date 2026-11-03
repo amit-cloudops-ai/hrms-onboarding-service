@@ -11,7 +11,7 @@ This document makes the existing decisions explicit for WP3 (documents) and WP4 
 
 - WP2 owns Step Functions sequencing, callback task-token lifecycle, timeout/reminder handling, and all writes to canonical lifecycle fields in `hrms-dev-onboarding-stages`.
 - WP3 owns document upload URL generation, S3 object validation, document metadata/status in `hrms-dev-documents`, and rejection notification.
-- WP4 owns stage-specific business operations/adapters for IT provisioning, policy sign-off, and manager introduction. WP4 does not own the canonical WP2 stage lifecycle.
+- WP4 owns synchronous IT provisioning and manager-introduction adapters, plus the authenticated policy-acceptance record. WP4 does not own the canonical WP2 stage lifecycle.
 - WP5 owns authenticated API routes, employee/HR authorization, document/stage adapter invocation, and the server-side callback submission boundary.
 
 ## WP4 synchronous business-handler contract
@@ -33,7 +33,6 @@ Request:
 Allowed stages for WP4:
 
 - `it_provisioning`
-- `policy_signoff`
 - `manager_intro`
 
 Allowed modes: `simulated`, `real`. The deployment configuration is `MODE=simulated|real`; an explicit per-invocation mode may be used by offline tests only if the handler validates it against the deployment mode or the project owner approves that override. Do not let an untrusted public client choose real/simulated mode.
@@ -80,10 +79,11 @@ WP4 returns business-operation results only. It must not write `status`, `starte
 
 ### Policy sign-off
 
-- Employee acceptance must be authenticated and attributable to the immutable Cognito `sub` verified by WP5.
-- Record the policy identifier/version, acceptance timestamp, and relevant audit metadata according to an agreed schema.
-- Do not trust an employee ID, caller identity, or admin flag supplied in an untrusted request body.
-- The API contract's `POST /employees/{employee_id}/policies/sign` route is the public entry point; WP5 authorizes it before adapter invocation.
+- Policy sign-off is a human callback stage owned by WP2, not an automatic simulated WP4 stage.
+- WP5 authenticates the employee by immutable Cognito sub and invokes WP4 action sign_policy with a versioned acceptance.
+- WP4 records only the policy_id, policy_version, policy_accepted, policy_accepted_at, and policy_accepted_by attributes on the policy-signoff row; it never changes WP2 lifecycle status or task tokens.
+- WP5 submits the policy-signoff callback when its token exists. If the workflow has not reached that stage yet, WP2 detects the saved acceptance when it creates the callback token and resumes safely.
+- The demo uses company_policy v1 as a placeholder acknowledgement. Production must render the actual policy text/version and retain complete audit evidence.
 
 ### Manager introduction
 
@@ -129,7 +129,7 @@ WP3 uses the existing `hrms-dev-documents` table with keys `employee_id` + `doc_
 
 S3 event handling must be idempotent and conditional: an update is valid only when the stored `s3_key` equals the event object key and status is still `missing`. A stale event for a superseded upload must not modify the current document row. A verified document cannot be overwritten through a new upload request; rejected/missing attempts may be retried with a fresh random key.
 
-When all three required documents have passed validation, WP3 should request resumption of `document_collection` through the trusted WP5/WP2 completion path. WP3 must not directly mutate WP2 lifecycle fields.
+When all three required documents have passed validation, WP3 invokes the trusted WP2 resume_document_collection action. WP2 records a documents_verified readiness flag and submits the stored task token if the callback is active; if uploads finish before the workflow reaches the wait state, WP2 resumes automatically when it creates the token. WP3 must not directly mutate canonical lifecycle fields.
 
 ## Mode configuration
 
