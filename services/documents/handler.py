@@ -1,6 +1,7 @@
 """WP3 - Employee document collection service."""
 
 import json
+from decimal import Decimal
 import logging
 import os
 import uuid
@@ -62,11 +63,20 @@ ALLOWED_CONTENT_TYPES = {
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
+def _json_default(value):
+    """Serialize DynamoDB Decimal values without changing integer fields to strings."""
+    if isinstance(value, Decimal):
+        if value % 1 == 0:
+            return int(value)
+        return float(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def api_response(status_code, body):
     return {
         "statusCode": status_code,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body),
+        "body": json.dumps(body, default=_json_default),
     }
 
 
