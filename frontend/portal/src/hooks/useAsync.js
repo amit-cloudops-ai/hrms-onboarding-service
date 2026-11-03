@@ -9,10 +9,8 @@ export function useAsync(fn) {
     try {
       const data = await fn();
       setState({ data, error: null, loading: false });
-      return data;
     } catch (err) {
       setState({ data: null, error: err.message || 'Something went wrong.', loading: false });
-      throw err;
     }
   }, [fn]);
 
