@@ -17,7 +17,7 @@ Resources:
   WorkflowReminderTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: hrms-dev-onboarding-reminders-team
+      TopicName: hrms-team-onboarding-reminders
   WorkflowFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -55,7 +55,7 @@ Resources:
   OnboardingStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      Name: hrms-dev-onboarding-team
+      Name: hrms-team-onboarding
       Type: STANDARD
       DefinitionUri: state_machine.asl.json
       DefinitionSubstitutions:

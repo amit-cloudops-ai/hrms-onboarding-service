@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 from services.identity.handler import (
@@ -121,22 +121,16 @@ def _get_employee(employee_id: str, *, table: Any | None = None) -> dict[str, An
 
 
 def _get_employee_by_sub(cognito_sub: str, *, table: Any | None = None) -> dict[str, Any] | None:
-    """Resolve the authenticated employee by immutable Cognito subject.
-
-    A scan is acceptable for the small evaluation dataset. Production must
-    add a GSI on cognito_sub and replace this with Query.
-    """
+    """Resolve the authenticated employee through the Cognito-subject GSI."""
     if not isinstance(cognito_sub, str) or not cognito_sub.strip():
         return None
     target = _employees_table(table)
-    result = target.scan(FilterExpression=Attr("cognito_sub").eq(cognito_sub))
-    matches = list(result.get("Items", []))
-    while result.get("LastEvaluatedKey"):
-        result = target.scan(
-            FilterExpression=Attr("cognito_sub").eq(cognito_sub),
-            ExclusiveStartKey=result["LastEvaluatedKey"],
-        )
-        matches.extend(result.get("Items", []))
+    result = target.query(
+        IndexName="cognito-sub-index",
+        KeyConditionExpression=Key("cognito_sub").eq(cognito_sub),
+        Limit=2,
+    )
+    matches = result.get("Items", [])
     if len(matches) > 1:
         logger.error("Multiple employee records share one Cognito subject.")
         raise RuntimeError("Employee identity mapping is ambiguous")
