@@ -279,6 +279,19 @@
       "Cause": "Unsupported onboarding stage."
     },
     "WorkflowComplete": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${WorkflowFunctionArn}",
+        "Payload": {
+          "action": "send_completion_notification",
+          "employee_id.$": "$.employee_id"
+        }
+      },
+      "ResultPath": "$.completion_notification",
+      "Next": "ExecutionSucceeded"
+    },
+    "ExecutionSucceeded": {
       "Type": "Succeed"
     }
   }
