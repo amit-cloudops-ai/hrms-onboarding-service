@@ -26,14 +26,29 @@ echo "Creates CloudFront, private S3, Cognito, DynamoDB, Lambda, Step Functions,
 read -r -p "Type DEPLOY to create the isolated team environment: " answer
 [[ "$answer" == "DEPLOY" ]] || { echo "Cancelled."; exit 1; }
 
-guard_stack hrms-team-hosting
-aws cloudformation deploy --template-file infra/team-dev-hosting.yaml --stack-name hrms-team-hosting --region "$REGION" --no-fail-on-empty-changeset --parameter-overrides Environment=team
-PORTAL_BUCKET="$(stack_output hrms-team-hosting PortalBucketName)"
-PORTAL_DISTRIBUTION="$(stack_output hrms-team-hosting PortalDistributionId)"
-PORTAL_ORIGIN="$(stack_output hrms-team-hosting PortalUrl)"
-DASHBOARD_BUCKET="$(stack_output hrms-team-hosting DashboardBucketName)"
-DASHBOARD_DISTRIBUTION="$(stack_output hrms-team-hosting DashboardDistributionId)"
-DASHBOARD_ORIGIN="$(stack_output hrms-team-hosting DashboardUrl)"
+# Reuse the hosting topology that is already deployed. The old
+# hrms-team-hosting stack is ROLLBACK_COMPLETE and must not be updated.
+# The S3 buckets are owned by hrms-team-static-hosting; CloudFront v2 adds
+# private OAC-backed distributions and is the canonical public origin.
+HOSTING_STACK="${HOSTING_STACK:-hrms-team-cloudfront-hosting-v2}"
+BUCKET_STACK="${BUCKET_STACK:-hrms-team-static-hosting}"
+for STACK in "$HOSTING_STACK" "$BUCKET_STACK"; do
+  if ! stack_exists "$STACK"; then
+    echo "Required existing hosting stack $STACK was not found. Refusing to create or replace hosting resources automatically." >&2
+    exit 1
+  fi
+  STATUS="$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text)"
+  case "$STATUS" in
+    CREATE_COMPLETE|UPDATE_COMPLETE) ;;
+    *) echo "Hosting stack $STACK is in $STATUS; refusing deployment." >&2; exit 1 ;;
+  esac
+done
+PORTAL_BUCKET="$(stack_output "$BUCKET_STACK" PortalBucketName)"
+PORTAL_DISTRIBUTION="$(stack_output "$HOSTING_STACK" PortalDistributionId)"
+PORTAL_ORIGIN="$(stack_output "$HOSTING_STACK" PortalUrl)"
+DASHBOARD_BUCKET="$(stack_output "$BUCKET_STACK" DashboardBucketName)"
+DASHBOARD_DISTRIBUTION="$(stack_output "$HOSTING_STACK" DashboardDistributionId)"
+DASHBOARD_ORIGIN="$(stack_output "$HOSTING_STACK" DashboardUrl)"
 CALLBACK_URLS="$PORTAL_ORIGIN/,$DASHBOARD_ORIGIN/"
 
 guard_stack hrms-team-foundation
