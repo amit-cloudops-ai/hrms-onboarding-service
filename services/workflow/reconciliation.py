@@ -36,14 +36,25 @@ def reconcile_completion_notifications(
     if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 100:
         raise ValueError("page_size must be an integer between 1 and 100")
 
-    scan_args: dict[str, Any] = {"Limit": page_size, "ConsistentRead": True}
+    target_employee_id = event.get("employee_id")
     cursor = event.get("exclusive_start_key")
-    if cursor is not None:
-        if not isinstance(cursor, dict) or not cursor:
-            raise ValueError("exclusive_start_key must be a non-empty DynamoDB key object")
-        scan_args["ExclusiveStartKey"] = cursor
-
-    response = employees_table.scan(**scan_args)
+    if target_employee_id is not None:
+        if not isinstance(target_employee_id, str) or not target_employee_id.strip():
+            raise ValueError("employee_id must be a non-empty string")
+        if cursor is not None:
+            raise ValueError("exclusive_start_key cannot be combined with employee_id")
+        target = employees_table.get_item(
+            Key={"employee_id": target_employee_id.strip()},
+            ConsistentRead=True,
+        ).get("Item")
+        response = {"Items": [target] if isinstance(target, dict) else []}
+    else:
+        scan_args: dict[str, Any] = {"Limit": page_size, "ConsistentRead": True}
+        if cursor is not None:
+            if not isinstance(cursor, dict) or not cursor:
+                raise ValueError("exclusive_start_key must be a non-empty DynamoDB key object")
+            scan_args["ExclusiveStartKey"] = cursor
+        response = employees_table.scan(**scan_args)
     eligible: list[dict[str, str]] = []
     sent: list[str] = []
     skipped: dict[str, int] = {
