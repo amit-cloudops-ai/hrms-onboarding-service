@@ -346,41 +346,30 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
             while result.get("LastEvaluatedKey"):
                 result = table.scan(ExclusiveStartKey=result["LastEvaluatedKey"])
                 items.extend(result.get("Items", []))
-            # Read document records once so the HR overview can show uploads
-            # without opening each employee record individually.
-            document_result = _documents_table(documents_table).scan()
-            document_items = list(document_result.get("Items", []))
-            while document_result.get("LastEvaluatedKey"):
-                document_result = _documents_table(documents_table).scan(
-                    ExclusiveStartKey=document_result["LastEvaluatedKey"]
-                )
-                document_items.extend(document_result.get("Items", []))
-            document_summary: dict[str, dict[str, int]] = {}
-            for document in document_items:
-                if not isinstance(document, dict):
-                    continue
-                owner = document.get("employee_id")
-                if not isinstance(owner, str):
-                    continue
-                summary = document_summary.setdefault(owner, {"total": 0, "pending_review": 0, "approved": 0})
-                if document.get("status") == "verified":
-                    summary["total"] += 1
-                    if document.get("review_status") == "approved":
-                        summary["approved"] += 1
-                    elif document.get("review_status") not in ("rejected",):
-                        summary["pending_review"] += 1
             output = []
             for item in items:
                 if not isinstance(item, dict) or not item.get("employee_id"):
                     continue
                 progress = get_progress(item["employee_id"], table=stages_table)
+                docs_response = _invoke_service(os.environ.get("DOCUMENTS_FUNCTION_NAME", ""), {
+                    "action": "list_documents", "employee_id": item["employee_id"],
+                    "caller": {"sub": claims.get("sub"), "email": claims.get("email"), "is_admin": True},
+                })
+                if docs_response.get("statusCode", 500) != 200:
+                    return docs_response
+                try:
+                    docs_payload = json.loads(docs_response.get("body", "{}"))
+                except (TypeError, json.JSONDecodeError):
+                    return _error(502, "INVALID_DEPENDENCY_RESPONSE", "The document service returned an invalid response.")
+                documents = docs_payload.get("documents", []) if isinstance(docs_payload, dict) else []
+                verified = [doc for doc in documents if isinstance(doc, dict) and doc.get("status") == "verified"]
+                pending_review = sum(1 for doc in verified if doc.get("review_status") not in ("approved", "rejected"))
+                approved = sum(1 for doc in verified if doc.get("review_status") == "approved")
                 public_item = dict(item)
                 public_item.pop("execution_arn", None)
                 public_item.pop("cognito_sub", None)
-                docs = document_summary.get(item["employee_id"], {"total": 0, "pending_review": 0, "approved": 0})
-                output.append({**public_item, "progress": progress, "documents": docs["total"],
-                               "documents_pending_review": docs["pending_review"],
-                               "documents_approved": docs["approved"]})
+                output.append({**public_item, "progress": progress, "documents": len(verified),
+                               "documents_pending_review": pending_review, "documents_approved": approved})
             return _response(200, {"employees": output})
         except ClientError:
             logger.exception("Employee list query failed.")
