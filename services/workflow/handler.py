@@ -8,10 +8,10 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 try:
-    from .completion import send_completion_notification
+    from .completion import _all_stages_complete, send_completion_notification
     from .reconciliation import reconcile_completion_notifications
 except ImportError:  # Support direct Lambda module loading from CodeUri.
-    from completion import send_completion_notification
+    from completion import _all_stages_complete, send_completion_notification
     from reconciliation import reconcile_completion_notifications
 
 VALID_STAGES=("document_collection","it_provisioning","policy_signoff","manager_intro")
@@ -161,7 +161,20 @@ def execute_business_stage(event,*,lambda_client=None):
         raise RuntimeError("WP4 did not confirm successful business-stage execution")
     return result
 
-def mark_stage_complete(event,*,table=None,now=None):
+def _send_completion_if_ready(employee_id, stages_table, *, employees_table=None, ses=None, now=None):
+    """Send completion as soon as the fourth required stage is durably complete."""
+    if _all_stages_complete(stages_table, employee_id):
+        return {"ok": True, "employee_id": employee_id, "status": "not_ready"}
+    return send_completion_notification(
+        {"employee_id": employee_id},
+        employees_table=employees_table,
+        stages_table=stages_table,
+        ses=ses,
+        now=now,
+    )
+
+
+def mark_stage_complete(event,*,table=None,now=None,employees_table=None,ses=None):
     employee_id=_required(event,"employee_id")
     stage=_stage(event)
     correlation=event.get("correlation_id")
@@ -189,10 +202,20 @@ def mark_stage_complete(event,*,table=None,now=None):
             raise
         current=target.get_item(Key={"employee_id":employee_id,"stage":stage},ConsistentRead=True).get("Item",{})
         same=(correlation is None or current.get("correlation_id")==correlation)
-        if current.get("status")=="complete" and same and not current.get("task_token"):
-            return {"ok":True,"employee_id":employee_id,"stage":stage,"status":"complete"}
-        raise
-    return {"ok":True,"employee_id":employee_id,"stage":stage,"status":"complete"}
+        if current.get("status")!="complete" or not same or current.get("task_token"):
+            raise
+
+    # Run after persistence, including an idempotent replay. This lets the
+    # workflow recover a previously completed final stage without a raw SES send.
+    notification = _send_completion_if_ready(
+        employee_id, target, employees_table=employees_table, ses=ses, now=now
+    )
+    result={"ok":True,"employee_id":employee_id,"stage":stage,"status":"complete"}
+    if notification.get("status") in {"sent","already_sent"}:
+        result["completion_email_status"]="sent"
+    elif notification.get("status")=="not_ready":
+        result["completion_email_status"]="not_ready"
+    return result
 
 def mark_stage_failed(event,*,table=None,now=None):
     employee_id=_required(event,"employee_id")

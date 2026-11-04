@@ -1,4 +1,5 @@
 import json, os, unittest
+import handler
 from unittest.mock import Mock, patch
 from handler import execute_business_stage, lambda_handler, mark_stage_complete, mark_stage_failed, resume_document_collection, send_reminder, start_business_stage, start_stage
 
@@ -61,11 +62,36 @@ class BusinessStageTests(unittest.TestCase):
         self.assertIn("correlation_id=:correlation",table.update_item.call_args.kwargs["ConditionExpression"])
 
 class CompletionAndReminderTests(unittest.TestCase):
-    def test_callback_completion_requires_token(self):
+    @patch("handler._all_stages_complete", return_value=[])
+    @patch("handler.send_completion_notification", return_value={"ok": True, "status": "sent"})
+    def test_final_stage_completion_sends_email_automatically(self, send_email, _all_complete):
+        table = Mock()
+        result = mark_stage_complete(
+            {"employee_id": "emp-1", "stage": "manager_intro", "correlation_id": "exec-1:manager_intro"},
+            table=table,
+        )
+        self.assertEqual(result["completion_email_status"], "sent")
+        send_email.assert_called_once()
+        self.assertEqual(send_email.call_args.args[0], {"employee_id": "emp-1"})
+
+    @patch("handler._all_stages_complete", return_value=["manager_intro"])
+    @patch("handler.send_completion_notification")
+    def test_non_final_stage_does_not_send_completion_email(self, send_email, _all_complete):
+        table = Mock()
+        result = mark_stage_complete(
+            {"employee_id": "emp-1", "stage": "policy_signoff"},
+            table=table,
+        )
+        self.assertEqual(result["completion_email_status"], "not_ready")
+        send_email.assert_not_called()
+
+    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
+    def test_callback_completion_requires_token(self, _all_complete):
         table=Mock()
         mark_stage_complete({"employee_id":"emp-1","stage":"document_collection"},table=table)
         self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
-    def test_policy_signoff_callback_completion(self):
+    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
+    def test_policy_signoff_callback_completion(self, _all_complete):
         table=Mock()
         mark_stage_complete({"employee_id":"emp-1","stage":"policy_signoff"},table=table)
         self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
