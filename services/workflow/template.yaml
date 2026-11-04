@@ -5,6 +5,9 @@ Parameters:
   StagesTableName:
     Type: String
     Default: hrms-dev-onboarding-stages
+  EmployeesTableName:
+    Type: String
+    Default: hrms-dev-employees
   StagesFunctionName:
     Type: String
     Description: WP4 Lambda function name returned by the WP4 stack.
@@ -17,9 +20,14 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional HR administrator email for workflow reminder notifications.
+  CompletionEmailSource:
+    Type: String
+    Default: ''
+    Description: Verified SES sender email address for employee Day 1 completion messages.
 
 Conditions:
   HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+  HasCompletionEmailSource: !Not [!Equals [!Ref CompletionEmailSource, '']]
 
 Resources:
   WorkflowReminderTopic:
@@ -46,6 +54,8 @@ Resources:
       Environment:
         Variables:
           STAGES_TABLE: !Ref StagesTableName
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          COMPLETION_EMAIL_SOURCE: !Ref CompletionEmailSource
           REMINDER_TOPIC_ARN: !Ref WorkflowReminderTopic
           STAGES_FUNCTION_NAME: !Ref StagesFunctionName
           MODE: !Ref Mode
@@ -53,12 +63,23 @@ Resources:
         - Statement:
             - Sid: ReadAndUpdateCanonicalStageRecords
               Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:UpdateItem]
               Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
+            - Sid: ReadAndUpdateEmployeeCompletionStatus
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
             - Sid: PublishWorkflowReminders
               Effect: Allow
               Action: [sns:Publish]
               Resource: !Ref WorkflowReminderTopic
+            - !If
+              - HasCompletionEmailSource
+              - Sid: SendEmployeeCompletionEmail
+                Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${CompletionEmailSource}'
+              - !Ref AWS::NoValue
             - Sid: InvokeWP4BusinessHandler
               Effect: Allow
               Action: [lambda:InvokeFunction]

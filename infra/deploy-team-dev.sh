@@ -9,6 +9,7 @@ if [[ "$ACCOUNT_ID" != "$EXPECTED_ACCOUNT_ID" ]]; then
 fi
 COGNITO_DOMAIN_PREFIX="${COGNITO_DOMAIN_PREFIX:-hrms-team-$ACCOUNT_ID}"
 HR_ADMIN_EMAIL="${HR_ADMIN_EMAIL:?Set HR_ADMIN_EMAIL to the team HR administrator email.}"
+COMPLETION_EMAIL_SOURCE="${COMPLETION_EMAIL_SOURCE:?Set COMPLETION_EMAIL_SOURCE to a verified SES sender in $REGION.}"
 ALLOW_STACK_UPDATES="${ALLOW_STACK_UPDATES:-false}"
 ENABLE_POINT_IN_TIME_RECOVERY="${ENABLE_POINT_IN_TIME_RECOVERY:-false}"
 stack_exists(){ aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" >/dev/null 2>&1; }
@@ -46,7 +47,7 @@ COGNITO_DOMAIN="$(stack_output hrms-team-foundation CognitoHostedUiDomain)"
 
 deploy_sam services/stages/template.yaml .aws-sam/team-wp4 hrms-team-wp4 Mode=simulated StagesTableName="$STAGES_TABLE"
 STAGES_FUNCTION_NAME="$(stack_output hrms-team-wp4 StagesFunctionName)"
-deploy_sam services/workflow/template.yaml .aws-sam/team-wp2 hrms-team-wp2 Mode=simulated StagesTableName="$STAGES_TABLE" StagesFunctionName="$STAGES_FUNCTION_NAME" NotificationEmail="$HR_ADMIN_EMAIL"
+deploy_sam services/workflow/template.yaml .aws-sam/team-wp2 hrms-team-wp2 Mode=simulated StagesTableName="$STAGES_TABLE" EmployeesTableName="$EMPLOYEES_TABLE" StagesFunctionName="$STAGES_FUNCTION_NAME" NotificationEmail="$HR_ADMIN_EMAIL" CompletionEmailSource="$COMPLETION_EMAIL_SOURCE"
 STATE_MACHINE_ARN="$(stack_output hrms-team-wp2 StateMachineArn)"
 WORKFLOW_FUNCTION_NAME="$(stack_output hrms-team-wp2 WorkflowFunctionName)"
 deploy_sam services/documents/template.yaml .aws-sam/team-wp3 hrms-team-wp3 EmployeesTableName="$EMPLOYEES_TABLE" DocumentsTableName="$DOCUMENTS_TABLE" WorkflowFunctionName="$WORKFLOW_FUNCTION_NAME" UploadAllowedOrigin="$PORTAL_ORIGIN" NotificationEmail="$HR_ADMIN_EMAIL"
