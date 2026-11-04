@@ -10,6 +10,15 @@ fi
 COGNITO_DOMAIN_PREFIX="${COGNITO_DOMAIN_PREFIX:-hrms-team-$ACCOUNT_ID}"
 HR_ADMIN_EMAIL="${HR_ADMIN_EMAIL:?Set HR_ADMIN_EMAIL to the team HR administrator email.}"
 COMPLETION_EMAIL_SOURCE="${COMPLETION_EMAIL_SOURCE:?Set COMPLETION_EMAIL_SOURCE to a verified SES sender in $REGION.}"
+SENDER_VERIFICATION="$(aws ses get-identity-verification-attributes --identities "$COMPLETION_EMAIL_SOURCE" --region "$REGION" --query 'VerificationAttributes.*.VerificationStatus' --output text)"
+if [[ "$SENDER_VERIFICATION" != "Success" ]]; then
+  echo "COMPLETION_EMAIL_SOURCE is not a verified SES identity in $REGION." >&2
+  exit 1
+fi
+SES_PRODUCTION_ACCESS="$(aws sesv2 get-account --region "$REGION" --query 'ProductionAccessEnabled' --output text)"
+if [[ "$SES_PRODUCTION_ACCESS" != "True" ]]; then
+  echo "WARNING: SES is in the sandbox. Completion emails can only reach verified recipient identities." >&2
+fi
 ALLOW_STACK_UPDATES="${ALLOW_STACK_UPDATES:-false}"
 ENABLE_POINT_IN_TIME_RECOVERY="${ENABLE_POINT_IN_TIME_RECOVERY:-false}"
 stack_exists(){ aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" >/dev/null 2>&1; }
@@ -75,6 +84,11 @@ if ! aws cognito-idp admin-get-user --user-pool-id "$USER_POOL_ID" --username "$
   aws cognito-idp admin-create-user --user-pool-id "$USER_POOL_ID" --username "$HR_ADMIN_EMAIL" --user-attributes Name=email,Value="$HR_ADMIN_EMAIL" Name=email_verified,Value=true --desired-delivery-mediums EMAIL --region "$REGION"
 fi
 aws cognito-idp admin-add-user-to-group --user-pool-id "$USER_POOL_ID" --username "$HR_ADMIN_EMAIL" --group-name hr-admins --region "$REGION"
+HR_ADMIN_IN_GROUP="$(aws cognito-idp admin-list-groups-for-user --user-pool-id "$USER_POOL_ID" --username "$HR_ADMIN_EMAIL" --region "$REGION" --query "contains(Groups[].GroupName, 'hr-admins')" --output text)"
+if [[ "$HR_ADMIN_IN_GROUP" != "True" ]]; then
+  echo "HR administrator $HR_ADMIN_EMAIL is not a member of hr-admins after assignment." >&2
+  exit 1
+fi
 
 cat > frontend/portal/.env.production <<EOF
 VITE_USE_MOCK=false
