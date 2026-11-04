@@ -138,7 +138,7 @@ WP3's Lambda handler should not trust client-supplied identity fields. The publi
 
 ### DynamoDB metadata (internal only)
 
-Use the existing `hrms-dev-documents` table, with partition key `employee_id` and sort key `doc_type`. Store at least:
+Use the deployed team environment's `hrms-team-documents` table (standalone development templates may use `hrms-dev-documents`), with partition key `employee_id` and sort key `doc_type`. Store at least:
 
 - `employee_id`
 - `doc_type`
