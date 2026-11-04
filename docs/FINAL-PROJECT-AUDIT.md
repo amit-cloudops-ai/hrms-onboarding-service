@@ -31,7 +31,7 @@ The two CloudFront URLs in the snapshot are:
 - Employee portal: `https://d1aozjt2t5kjtv.cloudfront.net`
 - HR dashboard: `https://d2i8jrjhff3cr3.cloudfront.net`
 
-The separate static-hosting stack also exposes two Lambda Function URLs. The API CORS and Cognito callback/logout allowlists include both hosting paths and local development origins. The project should designate one canonical public hosting path and remove stale origins only after confirming which frontend deployment is in use.
+The separate static-hosting stack also exposes two Lambda Function URLs. Their `AuthType` was not queried in the audit, so their direct-public access posture is unknown. The API CORS and Cognito callback/logout allowlists include both hosting paths and local development origins. The remediation script now designates CloudFront v2 as the canonical public origin; inspect the Function URL `AuthType` and usage before disabling the legacy URLs or removing their callback origins.
 
 **Deployment-script defect — corrected in the remediation branch:** the original script expected the old `hrms-team-hosting` stack and its outputs. The audit shows that stack is `ROLLBACK_COMPLETE`, while the deployed CloudFront stack is named `hrms-team-cloudfront-hosting-v2` and the S3 buckets are owned by `hrms-team-static-hosting`. The remediation branch now reuses those two existing stacks, verifies their health and refuses to create/replace hosting resources automatically. This script change passed the CI shell-syntax check; it has not been run against AWS.
 
@@ -162,6 +162,7 @@ Documentation gaps found in the repository include a placeholder architecture pa
 | API Cognito pool environment configured | Unverified | Read actual API Lambda environment variables |
 | Second running execution understood | Incomplete | Describe execution input/current state; do not stop it blindly |
 | Frontends use live API rather than mock data | Unverified | Inspect deployed build configuration and exercise both apps |
+| Legacy Lambda Function URL access posture | Unverified | Read `get-function-url-config` AuthType for both static functions; remove only after confirming no use |
 | Hosting deployment script matches deployed stack | Script corrected in remediation branch; not run against AWS | Review script diff, then approve deployment separately |
 | Real IT/calendar integrations | Intentionally simulated | Keep clearly labelled for mentor demo |
 | Production operational readiness | Incomplete | MFA policy, recovery/retention, monitoring, backups, incident runbooks and approved real providers |
