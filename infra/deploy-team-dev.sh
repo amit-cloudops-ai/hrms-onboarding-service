@@ -49,7 +49,7 @@ if [[ "$SAM_BUCKET_REGION" != "$REGION" ]]; then
   echo "SAM artifact bucket $SAM_ARTIFACT_BUCKET is in $SAM_BUCKET_REGION, not $REGION." >&2
   exit 1
 fi
-SAM_PUBLIC_ACCESS_BLOCK="$(aws s3api get-public-access-block --bucket "$SAM_ARTIFACT_BUCKET" --region "$REGION" --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' --output text)"
+SAM_PUBLIC_ACCESS_BLOCK="$(aws s3api get-public-access-block --bucket "$SAM_ARTIFACT_BUCKET" --region "$REGION" --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' --output text | tr '\t' ' ' | xargs)"
 if [[ "$SAM_PUBLIC_ACCESS_BLOCK" != "True True True True" ]]; then
   echo "SAM artifact bucket $SAM_ARTIFACT_BUCKET must have all four S3 Block Public Access settings enabled." >&2
   exit 1
