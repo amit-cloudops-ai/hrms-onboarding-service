@@ -41,7 +41,7 @@ The separate static-hosting stack also exposes two Lambda Function URLs. The API
 
 - Cognito user pool: `us-east-1_GUx6uZsFJ`
 - Public app client: `5659oiu8c5v4q83cq8j4uepb4n`
-- HR group: `hr-admins`; the audited administrator is a member.
+- HR group: `hr-admins` exists. However, the audit's `admin-list-groups-for-user` query for `amitmadakatti@gmail.com` returned an empty list. Membership for the account actually used to sign in is therefore **not verified** and may be missing.
 - API Gateway HTTP API: `m040hqrfd4`
 - API authorizer: Cognito JWT, issuer bound to the user pool and audience bound to the public app client.
 - All nine listed application routes use the JWT authorizer.
@@ -49,7 +49,7 @@ The separate static-hosting stack also exposes two Lambda Function URLs. The API
 
 The deployed routes cover employee creation/listing, profile and progress reads, document status/upload URL, policy sign-off and the HR stage callback override.
 
-**Still to verify:** the audit's Lambda environment query did not include `COGNITO_USER_POOL_ID` for the API Lambda. The API template requires it for WP1 user creation. Confirm the actual deployed value before testing employee creation.
+**Still to verify:** (1) identify the exact Cognito username used for HR dashboard sign-in and confirm it belongs to `hr-admins`; the queried `amitmadakatti@gmail.com` account had no groups in the audit output. If it is the login account, add it to `hr-admins` and sign out/in to obtain a JWT with the updated group claim. (2) The audit's Lambda environment query did not include `COGNITO_USER_POOL_ID` for the API Lambda. The API template requires it for WP1 user creation. Confirm the actual deployed value before testing employee creation.
 
 ## 3. Workflow and stage state
 
@@ -139,6 +139,7 @@ Documentation gaps found in the repository include a placeholder architecture pa
 |---|---|---|
 | Core AWS stacks exist | Verified | CloudFormation inventory |
 | Cognito JWT authorization on API routes | Verified | API Gateway route/authorizer inventory |
+| HR dashboard login user belongs to `hr-admins` | Unverified; queried `amitmadakatti@gmail.com` had no groups | Check the actual login username; add to group only if missing, then obtain a fresh token |
 | All four audited employee stages complete | Verified | Consistent DynamoDB query |
 | Required documents verified | Verified | Document metadata query |
 | Employee lifecycle status independent of SES | Implemented in remediation branch; workflow unit tests passed; not deployed | Later approved deployment + read-only record check |
