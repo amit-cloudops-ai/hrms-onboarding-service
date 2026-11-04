@@ -25,7 +25,7 @@ The branch `feature/final-demo-readiness` separates employee lifecycle completio
 
 ## Remaining verification gates
 
-1. Confirm the exact Cognito username used for HR sign-in is in `hr-admins`; the audit query for `amitmadakatti@gmail.com` returned no groups. If membership is added, sign out/in to refresh the JWT claim.
+1. The queried Cognito account `amitmadakatti@gmail.com` is already in `hr-admins`; verify only if the dashboard uses a different login account.
 2. Inspect the running Step Functions execution before taking any action on it.
 3. Confirm the WP3 Lambda's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME` values.
 4. Confirm the API Lambda's `COGNITO_USER_POOL_ID` value.
