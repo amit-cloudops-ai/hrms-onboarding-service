@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from completion import _all_stages_complete, send_completion_notification
+try:
+    from .completion import _all_stages_complete, send_completion_notification
+except ImportError:  # Support direct Lambda module loading from CodeUri.
+    from completion import _all_stages_complete, send_completion_notification
 
 
 def _masked_email(value: Any) -> str | None:
