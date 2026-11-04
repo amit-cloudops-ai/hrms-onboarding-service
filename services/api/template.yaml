@@ -76,7 +76,7 @@ Resources:
       BuildMethod: makefile
     Properties:
       FunctionName: hrms-team-api
-      CodeUri: .
+      CodeUri: ../..
       Handler: handler.lambda_handler
       Runtime: python3.12
       Timeout: 30
