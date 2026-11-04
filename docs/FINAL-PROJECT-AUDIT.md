@@ -163,6 +163,7 @@ Documentation gaps found in the repository include a placeholder architecture pa
 | Second running execution understood | Incomplete | Describe execution input/current state; do not stop it blindly |
 | Frontends use live API rather than mock data | Unverified | Inspect deployed build configuration and exercise both apps |
 | Legacy Lambda Function URL access posture | Unverified | Read `get-function-url-config` AuthType for both static functions; remove only after confirming no use |
+| Existing private SAM artifact bucket | Unverified | Confirm a same-region bucket with all S3 Block Public Access flags enabled; deployment script refuses to create one |
 | Hosting deployment script matches deployed stack | Script corrected in remediation branch; not run against AWS | Review script diff, then approve deployment separately |
 | Real IT/calendar integrations | Intentionally simulated | Keep clearly labelled for mentor demo |
 | Production operational readiness | Incomplete | MFA policy, recovery/retention, monitoring, backups, incident runbooks and approved real providers |
