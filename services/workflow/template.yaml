@@ -67,7 +67,7 @@ Resources:
               Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
             - Sid: ReadAndUpdateEmployeeCompletionStatus
               Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
               Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
             - Sid: PublishWorkflowReminders
               Effect: Allow
