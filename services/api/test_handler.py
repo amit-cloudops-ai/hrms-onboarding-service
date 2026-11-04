@@ -149,14 +149,23 @@ class ApiResponseTests(unittest.TestCase):
         stages = Mock()
         stages.query.return_value = {"Items": []}
         claims = {"email": "hr@example.com", "cognito:groups": ["hr-admins"]}
+        documents = {"documents": [
+            {"document_type": "id_proof", "status": "verified", "review_status": "pending"},
+            {"document_type": "degree_certificate", "status": "verified", "review_status": "approved"},
+            {"document_type": "signed_offer_letter", "status": "missing", "review_status": "not_ready"},
+        ]}
         with patch.object(handler, "_employees_table", return_value=employees), \
-             patch.object(handler, "_stages_table", return_value=stages):
+             patch.object(handler, "_stages_table", return_value=stages), \
+             patch.object(handler, "_invoke_service", return_value={"statusCode": 200, "body": json.dumps(documents)}):
             response = handler.lambda_handler(event("GET", "/employees", claims=claims), None)
         self.assertEqual(response["statusCode"], 200)
         body = json.loads(response["body"])
         serialized = json.dumps(body)
         self.assertNotIn("internal-sub", serialized)
         self.assertNotIn("internal-execution-arn", serialized)
+        self.assertEqual(body["employees"][0]["documents"], 2)
+        self.assertEqual(body["employees"][0]["documents_pending_review"], 1)
+        self.assertEqual(body["employees"][0]["documents_approved"], 1)
 
     def test_downstream_lambda_function_error_is_sanitized(self):
         payload = Mock()
