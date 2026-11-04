@@ -63,5 +63,39 @@ class CompletionReconciliationTests(unittest.TestCase):
         self.assertEqual(send.call_count, 2)
 
 
+    @patch("reconciliation._all_stages_complete", return_value=[])
+    @patch("reconciliation.send_completion_notification", return_value={
+        "ok": False, "status": "failed", "error_code": "AccessDenied",
+    })
+    def test_targeted_reconciliation_reads_only_requested_employee(self, send, _stages):
+        self.employees.get_item.return_value = {
+            "Item": {"employee_id": "emp-1", "email": "asha@example.com"}
+        }
+        result = reconcile_completion_notifications(
+            {"employee_id": "emp-1"},
+            employees_table=self.employees,
+            stages_table=self.stages,
+        )
+        self.employees.get_item.assert_called_once_with(
+            Key={"employee_id": "emp-1"},
+            ConsistentRead=True,
+        )
+        self.employees.scan.assert_not_called()
+        send.assert_not_called()
+        self.assertEqual(result["scanned"], 1)
+        self.assertEqual(result["eligible"], [
+            {"employee_id": "emp-1", "email": "a***@example.com"}
+        ])
+        self.assertFalse(result["ok"])
+
+    def test_targeted_reconciliation_rejects_scan_cursor(self):
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            reconcile_completion_notifications(
+                {"employee_id": "emp-1", "exclusive_start_key": {"employee_id": "emp-0"}},
+                employees_table=self.employees,
+                stages_table=self.stages,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
