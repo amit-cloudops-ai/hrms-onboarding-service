@@ -108,16 +108,31 @@ class CompletionNotificationTests(unittest.TestCase):
         self.assertEqual(result["reason"], "delivery_outcome_unknown")
         self.ses.send_email.assert_not_called()
 
-    @patch.dict("os.environ", {"COMPLETION_EMAIL_SOURCE": "hr@example.com"}, clear=True)
-    def test_requires_verified_sender_configuration(self):
+    def test_missing_sender_configuration_fails_notification_not_onboarding(self):
         with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "COMPLETION_EMAIL_SOURCE"):
-                send_completion_notification(
-                    {"employee_id": self.employee_id},
-                    employees_table=self.employees,
-                    stages_table=self.stages,
-                    ses=self.ses,
-                )
+            result = send_completion_notification(
+                {"employee_id": self.employee_id},
+                employees_table=self.employees,
+                stages_table=self.stages,
+                ses=self.ses,
+            )
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["error_code"], "SENDER_NOT_CONFIGURED")
+        lifecycle_update = self.employees.update_item.call_args_list[0].kwargs
+        self.assertIn("#employee_status=:complete", lifecycle_update["UpdateExpression"])
+        self.ses.send_email.assert_not_called()
+
+    @patch.dict("os.environ", {"COMPLETION_EMAIL_SOURCE": "hr@example.com"}, clear=True)
+    def test_invalid_employee_recipient_fails_notification_not_onboarding(self):
+        self.employees.get_item.return_value["Item"]["email"] = "invalid-recipient"
+        result = send_completion_notification(
+            {"employee_id": self.employee_id},
+            employees_table=self.employees,
+            stages_table=self.stages,
+            ses=self.ses,
+        )
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["error_code"], "INVALID_RECIPIENT")
         self.ses.send_email.assert_not_called()
 
 
