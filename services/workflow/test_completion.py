@@ -93,7 +93,7 @@ class CompletionNotificationTests(unittest.TestCase):
             {"Error": {"Code": "ConditionalCheckFailedException", "Message": "claimed"}},
             "UpdateItem",
         )
-        self.employees.update_item.side_effect = conditional
+        self.employees.update_item.side_effect = [None, conditional]
         self.employees.get_item.side_effect = [
             {"Item": {"employee_id": self.employee_id, "full_name": "Asha Rao", "email": "asha@example.com"}},
             {"Item": {"completion_email_status": "sending"}},
