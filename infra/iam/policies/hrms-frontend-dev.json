@@ -1,0 +1,53 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListBucketsForConsole",
+      "Effect": "Allow",
+      "Action": "s3:ListAllMyBuckets",
+      "Resource": "*"
+    },
+    {
+      "Sid": "FrontendBucketList",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::hrms-dev-frontend-bucket"
+    },
+    {
+      "Sid": "FrontendBucketFiles",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::hrms-dev-frontend-bucket/*"
+    },
+    {
+      "Sid": "CloudFrontViewAndRefresh",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:ListDistributions", "cloudfront:GetDistribution",
+        "cloudfront:GetDistributionConfig", "cloudfront:CreateInvalidation",
+        "cloudfront:GetInvalidation", "cloudfront:ListInvalidations"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadApiGateway",
+      "Effect": "Allow",
+      "Action": "apigateway:GET",
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/restapis",
+        "arn:aws:apigateway:us-east-1::/restapis/*",
+        "arn:aws:apigateway:us-east-1::/apis",
+        "arn:aws:apigateway:us-east-1::/apis/*"
+      ]
+    },
+    {
+      "Sid": "ReadCognitoSettings",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:ListUserPools", "cognito-idp:DescribeUserPool",
+        "cognito-idp:ListUserPoolClients", "cognito-idp:DescribeUserPoolClient"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
