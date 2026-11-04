@@ -86,7 +86,8 @@ class CompletionReconciliationTests(unittest.TestCase):
         self.assertEqual(result["eligible"], [
             {"employee_id": "emp-1", "email": "a***@example.com"}
         ])
-        self.assertFalse(result["ok"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mode"], "preview")
 
     def test_targeted_reconciliation_rejects_scan_cursor(self):
         with self.assertRaisesRegex(ValueError, "cannot be combined"):
