@@ -124,7 +124,9 @@ def send_completion_notification(
         if status == "sent":
             return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
         if status == "sending":
-            return {"ok": True, "employee_id": employee_id, "status": "send_in_progress"}
+            raise RuntimeError(
+                "Completion email is already claimed; reconcile SES delivery before retrying"
+            )
         raise
 
     client = ses or boto3.client("ses")
