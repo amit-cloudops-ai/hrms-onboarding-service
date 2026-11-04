@@ -114,7 +114,7 @@ aws lambda invoke \
 cat /tmp/hrms-completion-preview.json
 ```
 
-Only after reviewing the preview and verifying the recipient's SES eligibility, repeat with `"confirm_send":true`. That targeted operation updates employee lifecycle status and attempts only that employee's completion email; it does not start another onboarding execution or touch other employee records. The workflow unit tests passed in GitHub Actions on commit `a858f635b09c7e85db775cc729e26df3a3122df1`; the deployment-script syntax check passed on commit `dbf61c630cbd5e01d8b91fb1159df752608361cd`. The latest documentation-only CI run was still in progress when this audit note was updated.
+Only after reviewing the preview and verifying the recipient's SES eligibility, repeat with `"confirm_send":true`. That targeted operation updates employee lifecycle status and attempts only that employee's completion email; it does not start another onboarding execution or touch other employee records. The full GitHub Actions validation passed on commit `8bf41493c87c3de378682f274031ff36dedaa579`: backend unit tests (including targeted reconciliation), Step Functions/SAM template validation, frontend lint/build, production dependency audit, CloudFormation lint, deployment-script syntax and backend SAM builds. The final documentation-only validation also passed on `ef5d2b1099bd61ab68a9fd571c07e8b1ba14f134`. The changes are available in draft PR #16; no merge or AWS deployment has occurred.
 
 ## 5. Document storage and DynamoDB
 
