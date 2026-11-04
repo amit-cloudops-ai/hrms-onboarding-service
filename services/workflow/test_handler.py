@@ -62,51 +62,54 @@ class BusinessStageTests(unittest.TestCase):
         self.assertIn("correlation_id=:correlation",table.update_item.call_args.kwargs["ConditionExpression"])
 
 class CompletionAndReminderTests(unittest.TestCase):
-    @patch("handler._all_stages_complete", return_value=[])
-    @patch("handler.send_completion_notification", return_value={"ok": True, "status": "sent"})
-    def test_final_stage_completion_sends_email_automatically(self, send_email, _all_complete):
+    @patch("handler.send_completion_notification")
+    def test_final_stage_completion_only_persists_lifecycle_state(self, send_email):
         table = Mock()
         result = mark_stage_complete(
             {"employee_id": "emp-1", "stage": "manager_intro", "correlation_id": "exec-1:manager_intro"},
             table=table,
         )
-        self.assertEqual(result["completion_email_status"], "sent")
-        send_email.assert_called_once()
-        self.assertEqual(send_email.call_args.args[0], {"employee_id": "emp-1"})
+        self.assertEqual(result, {
+            "ok": True, "employee_id": "emp-1",
+            "stage": "manager_intro", "status": "complete",
+        })
+        send_email.assert_not_called()
+        self.assertIn("correlation_id=:correlation", table.update_item.call_args.kwargs["ConditionExpression"])
 
-    @patch("handler._all_stages_complete", return_value=["manager_intro"])
     @patch("handler.send_completion_notification")
-    def test_non_final_stage_does_not_send_completion_email(self, send_email, _all_complete):
+    def test_callback_stage_completion_does_not_send_email(self, send_email):
         table = Mock()
         result = mark_stage_complete(
             {"employee_id": "emp-1", "stage": "policy_signoff"},
             table=table,
         )
-        self.assertEqual(result["completion_email_status"], "not_ready")
+        self.assertEqual(result["status"], "complete")
+        self.assertIn("attribute_exists(task_token)", table.update_item.call_args.kwargs["ConditionExpression"])
         send_email.assert_not_called()
 
-    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
-    def test_callback_completion_requires_token(self, _all_complete):
-        table=Mock()
-        mark_stage_complete({"employee_id":"emp-1","stage":"document_collection"},table=table)
-        self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
-    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
-    def test_policy_signoff_callback_completion(self, _all_complete):
-        table=Mock()
-        mark_stage_complete({"employee_id":"emp-1","stage":"policy_signoff"},table=table)
-        self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
+    def test_callback_completion_requires_token(self):
+        table = Mock()
+        mark_stage_complete(
+            {"employee_id": "emp-1", "stage": "document_collection"},
+            table=table,
+        )
+        self.assertIn("attribute_exists(task_token)", table.update_item.call_args.kwargs["ConditionExpression"])
+
     def test_business_completion_requires_correlation(self):
-        with self.assertRaisesRegex(ValueError,"correlation_id"):
-            mark_stage_complete({"employee_id":"emp-1","stage":"manager_intro"},table=Mock())
-    @patch.dict(os.environ,{"REMINDER_TOPIC_ARN":"arn:aws:sns:us-east-1:123:topic"},clear=True)
+        with self.assertRaisesRegex(ValueError, "correlation_id"):
+            mark_stage_complete({"employee_id": "emp-1", "stage": "manager_intro"}, table=Mock())
+
+    @patch.dict(os.environ, {"REMINDER_TOPIC_ARN": "arn:aws:sns:us-east-1:123:topic"}, clear=True)
     def test_policy_signoff_reminder(self):
-        table=Mock(); table.update_item.return_value={"Attributes":{"reminder_count":1}}
-        sns=Mock()
-        result=send_reminder({"employee_id":"emp-1","stage":"policy_signoff"},table=table,sns=sns)
-        self.assertEqual(result["reminder_count"],1)
+        table = Mock()
+        table.update_item.return_value = {"Attributes": {"reminder_count": 1}}
+        sns = Mock()
+        result = send_reminder({"employee_id": "emp-1", "stage": "policy_signoff"}, table=table, sns=sns)
+        self.assertEqual(result["reminder_count"], 1)
+
     def test_unknown_action(self):
-        with self.assertRaisesRegex(ValueError,"Unsupported workflow action"):
-            lambda_handler({"action":"unknown"},None)
+        with self.assertRaisesRegex(ValueError, "Unsupported workflow action"):
+            lambda_handler({"action": "unknown"}, None)
 
 if __name__=="__main__":
     unittest.main()

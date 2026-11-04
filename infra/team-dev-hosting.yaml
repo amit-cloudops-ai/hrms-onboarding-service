@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Private S3 and CloudFront hosting for the HRMS team portal and HR dashboard.
+Description: Legacy single-stack S3 and CloudFront hosting template. The current team environment uses the split hrms-team-static-hosting and hrms-team-cloudfront-hosting-v2 stacks; do not deploy this template over that topology.
 Parameters:
   Environment:
     Type: String
