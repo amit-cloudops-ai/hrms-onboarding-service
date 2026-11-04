@@ -25,13 +25,14 @@ The branch `feature/final-demo-readiness` separates employee lifecycle completio
 
 ## Remaining verification gates
 
-1. Inspect the running Step Functions execution before taking any action on it.
-2. Confirm the WP3 Lambda's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME` values.
-3. Confirm the API Lambda's `COGNITO_USER_POOL_ID` value.
-4. Resolve the SES `AccessDenied` using the exact Lambda log/CloudTrail event and verify the employee recipient is eligible in the SES sandbox.
-5. Verify the deployed portal and dashboard use `VITE_USE_MOCK=false` and the deployed API/Cognito endpoints.
-6. Reconcile the hosting stack names and the deployment script before another deployment.
-7. Run a controlled end-to-end test with non-sensitive test identities after approval.
+1. Confirm the exact Cognito username used for HR sign-in is in `hr-admins`; the audit query for `amitmadakatti@gmail.com` returned no groups. If membership is added, sign out/in to refresh the JWT claim.
+2. Inspect the running Step Functions execution before taking any action on it.
+3. Confirm the WP3 Lambda's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME` values.
+4. Confirm the API Lambda's `COGNITO_USER_POOL_ID` value.
+5. Resolve the SES `AccessDenied` using the exact Lambda log/CloudTrail event and verify the employee recipient is eligible in the SES sandbox.
+6. Verify the deployed portal and dashboard use `VITE_USE_MOCK=false` and the deployed API/Cognito endpoints.
+7. Reconcile the hosting stack names and the deployment script before another deployment.
+8. Run a controlled end-to-end test with non-sensitive test identities after approval.
 
 ## Production limitations
 
