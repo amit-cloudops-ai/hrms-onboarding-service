@@ -383,6 +383,29 @@ class TestDocumentHandler(unittest.TestCase):
         self.assertTrue(result)
         mock_process.assert_called_once_with(event)
 
+    @patch("handler.process_s3_upload", side_effect=[True, True])
+    def test_lambda_handler_processes_every_s3_record(self, mock_process):
+        first = {
+            "eventSource": "aws:s3",
+            "s3": {
+                "bucket": {"name": "test-bucket"},
+                "object": {"key": "employee-123/id_proof/one.pdf"},
+            },
+        }
+        second = {
+            "eventSource": "aws:s3",
+            "s3": {
+                "bucket": {"name": "test-bucket"},
+                "object": {"key": "employee-456/id_proof/two.pdf"},
+            },
+        }
+        result = handler.lambda_handler({"Records": [first, second]}, None)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_process.call_count, 2)
+        mock_process.assert_any_call({"Records": [first]})
+        mock_process.assert_any_call({"Records": [second]})
+
     @patch("handler.validate_s3_object")
     @patch("handler.documents_table")
     def test_process_valid_eventbridge_upload(self, mock_table, mock_validate):
