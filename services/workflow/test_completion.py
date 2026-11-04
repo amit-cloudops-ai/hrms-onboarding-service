@@ -96,13 +96,13 @@ class CompletionNotificationTests(unittest.TestCase):
             {"Item": {"employee_id": self.employee_id, "full_name": "Asha Rao", "email": "asha@example.com"}},
             {"Item": {"completion_email_status": "sending"}},
         ]
-        result = send_completion_notification(
-            {"employee_id": self.employee_id},
-            employees_table=self.employees,
-            stages_table=self.stages,
-            ses=self.ses,
-        )
-        self.assertEqual(result["status"], "send_in_progress")
+        with self.assertRaisesRegex(RuntimeError, "reconcile SES delivery"):
+            send_completion_notification(
+                {"employee_id": self.employee_id},
+                employees_table=self.employees,
+                stages_table=self.stages,
+                ses=self.ses,
+            )
         self.ses.send_email.assert_not_called()
 
     @patch.dict("os.environ", {"COMPLETION_EMAIL_SOURCE": "hr@example.com"}, clear=True)
