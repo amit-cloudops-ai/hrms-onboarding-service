@@ -1,29 +1,46 @@
 # Implementation status — team integration
 
-This document tracks the shared team build. Passing unit tests are not a substitute for end-to-end AWS verification.
+**Current baseline:** GitHub `team-dev` at `114dfe7`.  
+**AWS snapshot:** 4 November 2026, `us-east-1`.  
+**Evidence and release gates:** [Final project audit](FINAL-PROJECT-AUDIT.md).
 
-## Implemented in the integration branch
-- WP1 identity service: employee validation, Cognito user creation, immutable Cognito subject linking.
-- WP2 workflow support: private document-collection callback token, reminders, synchronous WP4 invocation, correlation-bound completion and failure recording.
-- WP3 document service: presigned uploads, metadata, S3 object validation and rejection notification.
-- WP4 business adapter: IT provisioning, policy sign-off and manager introduction in explicit simulated mode.
-- WP5 authenticated HTTP API: Cognito JWT authorizer, employee/HR authorization and service adapters.
-- WP6/WP7: portal and HR dashboard from the merged team frontend PR.
+## Implemented components
 
-## Integration design
-- Document collection waits on the WP2 Step Functions callback token.
-- WP3 never receives or stores the task token. The trusted WP5 callback path resumes WP2 after document verification.
-- WP2 invokes WP4 synchronously for the three business stages. WP4 receives no task token and does not write canonical lifecycle fields.
-- WP2 persists stage lifecycle state and correlates completion with the Step Functions execution.
+- **WP1 Identity:** employee input validation, Cognito user creation, Employee group assignment and immutable Cognito-subject linking.
+- **WP2 Workflow:** Step Functions orchestration, private callback tokens for document collection and policy sign-off, reminders, synchronous WP4 invocation, correlation-bound stage completion/failure and completion notification.
+- **WP3 Documents:** presigned S3 uploads, document metadata, S3 object validation, rejected-document notification and trusted WP2 document callback.
+- **WP4 Stages:** versioned policy acknowledgement plus simulated IT provisioning and manager introduction.
+- **WP5 API:** Cognito JWT authorizer, HR-group checks, immutable-subject employee authorization and WP3/WP4 service adapters.
+- **WP6/WP7:** employee portal and HR dashboard with separate mock and HTTP API adapters.
 
-## Release gates
-- Confirm the WP3 document-complete callback is wired to the authenticated WP5/WP2 callback boundary.
-- Complete policy-signing persistence and verify its authorization/audit fields.
-- Replace frontend mock adapters with the real WP5 API and verify both apps.
-- Validate SAM templates and Step Functions ASL in CI.
-- Deploy a dedicated team demo stack using MODE=simulated.
-- Run a real AWS end-to-end test for employee creation, upload, document verification, stage progression and dashboard visibility.
-- Configure approved IT/calendar providers, Cognito MFA, monitoring, backups and operational runbooks before claiming production readiness.
+## AWS evidence
 
-## Mode limitation
-IT provisioning and manager introduction are simulated. No approved external provider is configured. The project can be deployed as a controlled demonstration in simulated mode; it is not production-ready for real HR operations.
+The team foundation, WP2, WP3, WP4 and WP5 CloudFormation stacks were present and in successful stack states in the 4 November audit. The API Gateway routes were configured with a Cognito JWT authorizer. The audited employee had all four stage records complete and all three required documents verified.
+
+The employee record still showed `in_progress` because the completion email had failed. The IAM policy simulator allowed `ses:SendEmail`, while the SES account remained in the sandbox. The exact SES denial cause is not established. See the audit before changing IAM or SES settings.
+
+## Current remediation branch
+
+The branch `feature/final-demo-readiness` separates employee lifecycle completion from email delivery, removes the duplicate completion-email trigger from stage persistence, and makes reconciliation report failed notification attempts. These code changes require CI verification and a separately approved deployment before they can be considered active in AWS.
+
+## Remaining verification gates
+
+1. Inspect the running Step Functions execution before taking any action on it.
+2. Confirm the WP3 Lambda's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME` values.
+3. Confirm the API Lambda's `COGNITO_USER_POOL_ID` value.
+4. Resolve the SES `AccessDenied` using the exact Lambda log/CloudTrail event and verify the employee recipient is eligible in the SES sandbox.
+5. Verify the deployed portal and dashboard use `VITE_USE_MOCK=false` and the deployed API/Cognito endpoints.
+6. Reconcile the hosting stack names and the deployment script before another deployment.
+7. Run a controlled end-to-end test with non-sensitive test identities after approval.
+
+## Production limitations
+
+- WP4 is deliberately simulated. No approved IT account/equipment or calendar/manager-introduction provider exists.
+- The `company_policy` v1 acknowledgement is a demo placeholder, not a legally sufficient production policy record.
+- Cognito MFA is optional in the evaluation pool.
+- DynamoDB point-in-time recovery was disabled in the audit snapshot.
+- CloudWatch alarms, retention, tracing, alert routing, access logging, incident response and deletion/retention policy need production design.
+- Browser tokens are held in `sessionStorage`; evaluate a BFF using HttpOnly/Secure cookies and complete an XSS/CSP review before production.
+- The checked-in hosting deployment script is not aligned with the currently observed CloudFront v2 and Lambda Function URL stacks.
+
+**Release classification:** deployable simulated mentor demo after the remaining verification gates; not production-ready for real employee operations.
