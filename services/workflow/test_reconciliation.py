@@ -45,5 +45,23 @@ class CompletionReconciliationTests(unittest.TestCase):
             reconcile_completion_notifications({"confirm_send": "yes"}, employees_table=self.employees, stages_table=self.stages)
 
 
+    @patch("reconciliation._all_stages_complete", return_value=[])
+    @patch("reconciliation.send_completion_notification", return_value={
+        "ok": False, "status": "failed", "error_code": "AccessDenied",
+    })
+    def test_reports_failed_email_delivery_instead_of_false_success(self, send, _stages):
+        result = reconcile_completion_notifications(
+            {"confirm_send": True, "page_size": 10},
+            employees_table=self.employees,
+            stages_table=self.stages,
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["errors"], [
+            {"employee_id": "emp-1", "error": "AccessDenied"},
+            {"employee_id": "emp-3", "error": "AccessDenied"},
+        ])
+        self.assertEqual(send.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
