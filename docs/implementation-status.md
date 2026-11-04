@@ -21,7 +21,7 @@ The employee record still showed `in_progress` because the completion email had 
 
 ## Current remediation branch
 
-The branch `feature/final-demo-readiness` separates employee lifecycle completion from email delivery, removes the duplicate completion-email trigger from stage persistence, makes reconciliation report failed notification attempts, and adds a targeted single-employee recovery path. The full GitHub Actions validation passed on commit `8bf4149`, including the targeted-reconciliation tests, frontend lint/build, SAM builds and deployment-script validation. The latest documentation-only validation passed on `ef5d2b1`. These changes require final CI success and a separately approved deployment before they can be considered active in AWS.
+The branch `feature/final-demo-readiness` separates employee lifecycle completion from email delivery, removes the duplicate completion-email trigger from stage persistence, makes reconciliation report failed notification attempts, and adds a targeted single-employee recovery path. The full GitHub Actions validation passed on commit `4326ae3`, including targeted-reconciliation tests, frontend lint/build, SAM builds, CloudFormation validation and the no-new-resource deployment-script checks. These changes require final CI success and a separately approved deployment before they can be considered active in AWS.
 
 ## Remaining verification gates
 
