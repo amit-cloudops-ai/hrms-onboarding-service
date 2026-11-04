@@ -33,7 +33,7 @@ The two CloudFront URLs in the snapshot are:
 
 The separate static-hosting stack also exposes two Lambda Function URLs. The API CORS and Cognito callback/logout allowlists include both hosting paths and local development origins. The project should designate one canonical public hosting path and remove stale origins only after confirming which frontend deployment is in use.
 
-**Deployment-script defect:** `infra/deploy-team-dev.sh` and `infra/TEAM-DEV-DEPLOY.md` still expect the old `hrms-team-hosting` stack and its outputs. The audit shows that stack is `ROLLBACK_COMPLETE`, while the deployed CloudFront stack is named `hrms-team-cloudfront-hosting-v2`. The checked-in deployment script is therefore not aligned with the currently deployed hosting topology. Do not rerun it as-is.
+**Deployment-script defect — corrected in the remediation branch:** the original script expected the old `hrms-team-hosting` stack and its outputs. The audit shows that stack is `ROLLBACK_COMPLETE`, while the deployed CloudFront stack is named `hrms-team-cloudfront-hosting-v2` and the S3 buckets are owned by `hrms-team-static-hosting`. The remediation branch now reuses those two existing stacks, verifies their health and refuses to create/replace hosting resources automatically. This script change passed the CI shell-syntax check; it has not been run against AWS.
 
 ## 2. Identity, API and authorization
 
@@ -100,7 +100,7 @@ The audit's CloudWatch filter returned no matching `AccessDenied` log events. Th
 - Keep one notification invocation point: the Step Functions `WorkflowComplete` state. Stage completion only persists stage lifecycle state.
 - Make the reconciliation operation report failed sends rather than returning a misleading success.
 
-These changes do not resend email, alter the audited employee record, or deploy anything to AWS.
+These changes do not resend email, alter the audited employee record, or deploy anything to AWS. The workflow unit tests passed in GitHub Actions on commit `a858f635b09c7e85db775cc729e26df3a3122df1`; the deployment-script syntax check passed on commit `dbf61c630cbd5e01d8b91fb1159df752608361cd`. The latest documentation-only CI run was still in progress when this audit note was updated.
 
 ## 5. Document storage and DynamoDB
 
@@ -141,13 +141,13 @@ Documentation gaps found in the repository include a placeholder architecture pa
 | Cognito JWT authorization on API routes | Verified | API Gateway route/authorizer inventory |
 | All four audited employee stages complete | Verified | Consistent DynamoDB query |
 | Required documents verified | Verified | Document metadata query |
-| Employee lifecycle status independent of SES | Fix in remediation branch; not deployed | CI + later approved deployment + read-only record check |
+| Employee lifecycle status independent of SES | Implemented in remediation branch; workflow unit tests passed; not deployed | Later approved deployment + read-only record check |
 | SES completion email actually delivered | Unverified / failed in snapshot | CloudWatch/CloudTrail cause, recipient verification, successful test to verified recipient |
 | WP3 callback environment fully configured | Unverified | Read actual WP3 Lambda environment variables |
 | API Cognito pool environment configured | Unverified | Read actual API Lambda environment variables |
 | Second running execution understood | Incomplete | Describe execution input/current state; do not stop it blindly |
 | Frontends use live API rather than mock data | Unverified | Inspect deployed build configuration and exercise both apps |
-| Hosting deployment script matches deployed stack | Incomplete | Reconcile script/template with v2 CloudFront stack or select another approved host |
+| Hosting deployment script matches deployed stack | Script corrected in remediation branch; not run against AWS | Review script diff, then approve deployment separately |
 | Real IT/calendar integrations | Intentionally simulated | Keep clearly labelled for mentor demo |
 | Production operational readiness | Incomplete | MFA policy, recovery/retention, monitoring, backups, incident runbooks and approved real providers |
 
