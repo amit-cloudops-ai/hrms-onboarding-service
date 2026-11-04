@@ -90,6 +90,63 @@ def _mark_employee_complete(employees_table: Any, employee_id: str, timestamp: s
                 "Employee lifecycle status is not eligible for onboarding completion"
             ) from exc
 
+def _record_notification_failure(
+    employees_table: Any,
+    employee_id: str,
+    error_code: str,
+) -> dict[str, Any]:
+    """Persist a preflight/claim failure without failing onboarding itself."""
+    try:
+        employees_table.update_item(
+            Key={"employee_id": employee_id},
+            UpdateExpression=(
+                "SET completion_email_status=:failed, completion_email_error=:error"
+            ),
+            ConditionExpression=(
+                "attribute_not_exists(completion_email_status) "
+                "OR completion_email_status=:failed"
+            ),
+            ExpressionAttributeValues={
+                ":failed": "failed",
+                ":error": error_code[:80],
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            current = employees_table.get_item(
+                Key={"employee_id": employee_id},
+                ConsistentRead=True,
+            ).get("Item", {})
+            status = current.get("completion_email_status")
+            if status == "sent":
+                return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
+            if status == "sending":
+                return {
+                    "ok": False,
+                    "employee_id": employee_id,
+                    "status": "sending",
+                    "reason": "delivery_outcome_unknown",
+                }
+        code = exc.response.get("Error", {}).get("Code", "UNKNOWN")
+        logger.error(
+            "Could not persist completion notification failure for employee %s (%s)",
+            employee_id,
+            code,
+        )
+        return {
+            "ok": False,
+            "employee_id": employee_id,
+            "status": "failed",
+            "error_code": "NOTIFICATION_STATE_UPDATE_FAILED",
+        }
+    return {
+        "ok": False,
+        "employee_id": employee_id,
+        "status": "failed",
+        "error_code": error_code[:80],
+    }
+
+
 
 def send_completion_notification(
     event: dict[str, Any],
@@ -141,11 +198,15 @@ def send_completion_notification(
 
     recipient = employee.get("email")
     if not isinstance(recipient, str) or recipient.count("@") != 1:
-        raise ValueError("Employee record does not contain a valid email address")
+        return _record_notification_failure(
+            employees, employee_id, "INVALID_RECIPIENT"
+        )
 
     source = os.environ.get("COMPLETION_EMAIL_SOURCE", "").strip()
     if not source or source.count("@") != 1:
-        raise RuntimeError("COMPLETION_EMAIL_SOURCE must be a verified SES sender address")
+        return _record_notification_failure(
+            employees, employee_id, "SENDER_NOT_CONFIGURED"
+        )
 
     try:
         employees.update_item(
@@ -165,23 +226,31 @@ def send_completion_notification(
             },
         )
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+        code = exc.response.get("Error", {}).get("Code", "UNKNOWN")
+        if code == "ConditionalCheckFailedException":
+            current = employees.get_item(
+                Key={"employee_id": employee_id},
+                ConsistentRead=True,
+            ).get("Item", {})
+            status = current.get("completion_email_status")
+            if status == "sent":
+                return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
+            if status == "sending":
+                return {
+                    "ok": False,
+                    "employee_id": employee_id,
+                    "status": "sending",
+                    "reason": "delivery_outcome_unknown",
+                }
             raise
-        current = employees.get_item(
-            Key={"employee_id": employee_id},
-            ConsistentRead=True,
-        ).get("Item", {})
-        status = current.get("completion_email_status")
-        if status == "sent":
-            return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
-        if status == "sending":
-            return {
-                "ok": False,
-                "employee_id": employee_id,
-                "status": "sending",
-                "reason": "delivery_outcome_unknown",
-            }
-        raise
+        logger.error(
+            "Could not claim completion notification for employee %s (%s)",
+            employee_id,
+            code,
+        )
+        return _record_notification_failure(
+            employees, employee_id, "NOTIFICATION_CLAIM_FAILED"
+        )
 
     client = ses or boto3.client("ses")
     name = employee.get("full_name") or "there"
