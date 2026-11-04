@@ -41,6 +41,9 @@ jobs:
       - name: Workflow handler tests
         working-directory: services/workflow
         run: python -m unittest test_handler -v
+      - name: Workflow completion notification tests
+        working-directory: services/workflow
+        run: python -m unittest test_completion -v
       - name: Workflow callback tests
         working-directory: services/workflow
         run: python -m unittest test_callbacks -v
