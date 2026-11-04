@@ -1,13 +1,20 @@
-"""Idempotent employee Day 1 completion email for WP2."""
+"""Idempotent employee Day 1 completion email for WP2.
+
+Employee lifecycle completion is independent of notification delivery. A failed
+email must never leave an employee's onboarding status stuck in in_progress.
+"""
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_STAGES = (
     "document_collection",
@@ -52,6 +59,38 @@ def _all_stages_complete(stages_table: Any, employee_id: str) -> list[str]:
     return [stage for stage in REQUIRED_STAGES if statuses.get(stage) != "complete"]
 
 
+def _mark_employee_complete(employees_table: Any, employee_id: str, timestamp: str) -> None:
+    """Persist lifecycle completion before attempting any external notification."""
+    try:
+        employees_table.update_item(
+            Key={"employee_id": employee_id},
+            UpdateExpression=(
+                "SET #employee_status=:complete, "
+                "onboarding_completed_at=if_not_exists(onboarding_completed_at,:now)"
+            ),
+            ConditionExpression=(
+                "#employee_status=:in_progress OR #employee_status=:complete"
+            ),
+            ExpressionAttributeNames={"#employee_status": "status"},
+            ExpressionAttributeValues={
+                ":complete": "complete",
+                ":in_progress": "in_progress",
+                ":now": timestamp,
+            },
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        current = employees_table.get_item(
+            Key={"employee_id": employee_id},
+            ConsistentRead=True,
+        ).get("Item", {})
+        if current.get("status") != "complete":
+            raise ValueError(
+                "Employee lifecycle status is not eligible for onboarding completion"
+            ) from exc
+
+
 def send_completion_notification(
     event: dict[str, Any],
     *,
@@ -60,11 +99,12 @@ def send_completion_notification(
     ses: Any | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
-    """Send one Day 1 email, only after every required stage is persisted complete.
+    """Complete the employee lifecycle and attempt one idempotent Day 1 email.
 
-    A DynamoDB claim prevents concurrent/retried executions from sending twice.
-    A claim left in 'sending' after an ambiguous network failure is deliberately
-    not auto-retried: an operator must reconcile SES before clearing it.
+    The lifecycle status is committed independently of SES. A conditional
+    DynamoDB claim prevents concurrent sends. Definitive SES errors are stored
+    as failed and can be retried; ambiguous transport outcomes remain sending
+    so an operator can reconcile delivery without risking a duplicate email.
     """
     employee_id = _required_employee_id(event)
     employees = _table(employees_table, "EMPLOYEES_TABLE", "hrms-dev-employees")
@@ -81,9 +121,23 @@ def send_completion_notification(
     missing_stages = _all_stages_complete(stages, employee_id)
     if missing_stages:
         raise ValueError(
-            "Cannot send completion email; onboarding stages are not complete: "
+            "Cannot complete onboarding; required stages are not complete: "
             + ", ".join(missing_stages)
         )
+
+    timestamp = now or _now()
+    _mark_employee_complete(employees, employee_id, timestamp)
+
+    notification_status = employee.get("completion_email_status")
+    if notification_status == "sent":
+        return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
+    if notification_status == "sending":
+        return {
+            "ok": False,
+            "employee_id": employee_id,
+            "status": "sending",
+            "reason": "delivery_outcome_unknown",
+        }
 
     recipient = employee.get("email")
     if not isinstance(recipient, str) or recipient.count("@") != 1:
@@ -93,12 +147,12 @@ def send_completion_notification(
     if not source or source.count("@") != 1:
         raise RuntimeError("COMPLETION_EMAIL_SOURCE must be a verified SES sender address")
 
-    timestamp = now or _now()
     try:
         employees.update_item(
             Key={"employee_id": employee_id},
             UpdateExpression=(
-                "SET completion_email_status=:sending, completion_email_started_at=:now"
+                "SET completion_email_status=:sending, "
+                "completion_email_started_at=:now"
             ),
             ConditionExpression=(
                 "attribute_not_exists(completion_email_status) "
@@ -121,9 +175,12 @@ def send_completion_notification(
         if status == "sent":
             return {"ok": True, "employee_id": employee_id, "status": "already_sent"}
         if status == "sending":
-            raise RuntimeError(
-                "Completion email is already claimed; reconcile SES delivery before retrying"
-            )
+            return {
+                "ok": False,
+                "employee_id": employee_id,
+                "status": "sending",
+                "reason": "delivery_outcome_unknown",
+            }
         raise
 
     client = ses or boto3.client("ses")
@@ -148,34 +205,83 @@ def send_completion_notification(
             },
         )
     except ClientError as exc:
-        # SES returned a definitive service error, so a controlled retry is safe.
         code = exc.response.get("Error", {}).get("Code", "SES_SEND_FAILED")
+        try:
+            employees.update_item(
+                Key={"employee_id": employee_id},
+                UpdateExpression=(
+                    "SET completion_email_status=:failed, completion_email_error=:error"
+                ),
+                ConditionExpression="completion_email_status=:sending",
+                ExpressionAttributeValues={
+                    ":failed": "failed",
+                    ":sending": "sending",
+                    ":error": str(code)[:80],
+                },
+            )
+        except ClientError as persist_error:
+            persist_code = persist_error.response.get("Error", {}).get("Code", "UNKNOWN")
+            logger.error(
+                "Could not persist SES failure state for employee %s (%s)",
+                employee_id,
+                persist_code,
+            )
+            return {
+                "ok": False,
+                "employee_id": employee_id,
+                "status": "sending",
+                "reason": "notification_state_update_failed",
+            }
+        logger.warning("SES rejected completion notification (%s)", code)
+        return {
+            "ok": False,
+            "employee_id": employee_id,
+            "status": "failed",
+            "error_code": str(code)[:80],
+        }
+    except BotoCoreError as exc:
+        # A transport timeout can happen after SES accepted the message. Do not
+        # retry automatically because delivery may already have occurred.
+        logger.error(
+            "SES completion delivery outcome is unknown for employee %s (%s)",
+            employee_id,
+            type(exc).__name__,
+        )
+        return {
+            "ok": False,
+            "employee_id": employee_id,
+            "status": "sending",
+            "reason": "delivery_outcome_unknown",
+        }
+
+    try:
         employees.update_item(
             Key={"employee_id": employee_id},
-            UpdateExpression="SET completion_email_status=:failed, completion_email_error=:error",
+            UpdateExpression=(
+                "SET completion_email_status=:sent, "
+                "completion_email_sent_at=:now, "
+                "completion_email_message_id=:message_id"
+            ),
             ConditionExpression="completion_email_status=:sending",
             ExpressionAttributeValues={
-                ":failed": "failed",
+                ":sent": "sent",
                 ":sending": "sending",
-                ":error": str(code)[:80],
+                ":now": timestamp,
+                ":message_id": response.get("MessageId", "accepted"),
             },
         )
-        raise
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "UNKNOWN")
+        logger.error(
+            "SES accepted completion notification but state persistence failed for employee %s (%s)",
+            employee_id,
+            code,
+        )
+        return {
+            "ok": False,
+            "employee_id": employee_id,
+            "status": "sending",
+            "reason": "notification_state_update_failed",
+        }
 
-    employees.update_item(
-        Key={"employee_id": employee_id},
-        UpdateExpression=(
-            "SET completion_email_status=:sent, completion_email_sent_at=:now, "
-            "completion_email_message_id=:message_id, #employee_status=:complete"
-        ),
-        ConditionExpression="completion_email_status=:sending",
-        ExpressionAttributeNames={"#employee_status": "status"},
-        ExpressionAttributeValues={
-            ":sent": "sent",
-            ":complete": "complete",
-            ":sending": "sending",
-            ":now": timestamp,
-            ":message_id": response.get("MessageId", "accepted"),
-        },
-    )
     return {"ok": True, "employee_id": employee_id, "status": "sent"}
