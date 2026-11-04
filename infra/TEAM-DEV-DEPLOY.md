@@ -19,9 +19,9 @@ COGNITO_DOMAIN_PREFIX="hrms-team-924422830139" \
 bash infra/deploy-team-dev.sh
 ```
 
-The script checks the AWS account, asks for an explicit DEPLOY confirmation, creates the two plain CloudFormation foundation/hosting stacks, then deploys WP4 → WP2 → WP3 → WP5 with SAM. It builds both frontends with Cognito/API configuration, uploads static assets and invalidates CloudFront. The script is guarded against a wrong account, missing stack outputs and accidental stack updates.
+The script checks the AWS account, asks for an explicit DEPLOY confirmation, reuses the existing `hrms-team-static-hosting` S3 bucket stack and `hrms-team-cloudfront-hosting-v2` distribution stack, then deploys the foundation and WP4 → WP2 → WP3 → WP5 with SAM. It builds both frontends with Cognito/API configuration, uploads static assets and invalidates the existing CloudFront distributions. It refuses to create or replace hosting resources automatically if either expected hosting stack is missing or unhealthy.
 
-Cognito domain prefixes are globally unique. If the suggested prefix is taken, choose another lowercase prefix. If stacks already exist after a partial deployment, inspect them first; set ALLOW_STACK_UPDATES=true only when intentionally updating those stacks.
+The earlier `hrms-team-hosting` stack is in `ROLLBACK_COMPLETE` and is not used by the current script. The legacy `infra/team-dev-hosting.yaml` is not the owner template for the currently deployed split hosting topology. Do not deploy that legacy template over the existing resources. Cognito domain prefixes are globally unique. If the suggested prefix is taken, choose another lowercase prefix. If application stacks already exist, inspect them first; set ALLOW_STACK_UPDATES=true only when intentionally updating those stacks.
 
 Optional: set ENABLE_POINT_IN_TIME_RECOVERY=true for DynamoDB tables. It adds ongoing backup cost. The default is false for the evaluation environment.
 
