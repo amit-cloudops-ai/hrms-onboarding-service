@@ -98,5 +98,27 @@ class CompletionReconciliationTests(unittest.TestCase):
             )
 
 
+    @patch("reconciliation._all_stages_complete", return_value=[])
+    @patch("reconciliation.send_completion_notification", return_value={
+        "ok": False, "status": "failed", "error_code": "AccessDenied",
+    })
+    def test_targeted_send_attempts_only_the_requested_employee(self, send, _stages):
+        self.employees.get_item.return_value = {
+            "Item": {"employee_id": "emp-1", "email": "asha@example.com"}
+        }
+        result = reconcile_completion_notifications(
+            {"employee_id": "emp-1", "confirm_send": True},
+            employees_table=self.employees,
+            stages_table=self.stages,
+        )
+        self.employees.scan.assert_not_called()
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0], {"employee_id": "emp-1"})
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["errors"], [
+            {"employee_id": "emp-1", "error": "AccessDenied"}
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()
