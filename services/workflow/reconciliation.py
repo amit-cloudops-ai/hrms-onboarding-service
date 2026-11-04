@@ -90,10 +90,22 @@ def reconcile_completion_notifications(
                     ses=ses,
                     now=now,
                 )
-                if result.get("status") == "sent":
+                status = result.get("status")
+                if status == "sent":
                     sent.append(employee_id)
-                elif result.get("status") == "already_sent":
+                elif status == "already_sent":
                     skipped["already_sent"] += 1
+                elif status == "sending":
+                    skipped["sending"] += 1
+                else:
+                    errors.append({
+                        "employee_id": employee_id,
+                        "error": str(
+                            result.get("error_code")
+                            or result.get("reason")
+                            or "COMPLETION_EMAIL_FAILED"
+                        )[:80],
+                    })
             except Exception as exc:  # Continue this page; report only safe error text.
                 errors.append({
                     "employee_id": employee_id,
