@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 import boto3
 from botocore.exceptions import ClientError
+from completion import send_completion_notification
 
 VALID_STAGES=("document_collection","it_provisioning","policy_signoff","manager_intro")
 CALLBACK_STAGES=("document_collection","policy_signoff")
@@ -236,4 +237,5 @@ def lambda_handler(event,context):
     if action=="mark_stage_complete": return mark_stage_complete(event)
     if action=="mark_stage_failed": return mark_stage_failed(event)
     if action=="send_reminder": return send_reminder(event)
+    if action=="send_completion_notification": return send_completion_notification(event)
     raise ValueError("Unsupported workflow action")
