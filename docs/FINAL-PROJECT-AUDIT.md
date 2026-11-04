@@ -100,7 +100,21 @@ The audit's CloudWatch filter returned no matching `AccessDenied` log events. Th
 - Keep one notification invocation point: the Step Functions `WorkflowComplete` state. Stage completion only persists stage lifecycle state.
 - Make the reconciliation operation report failed sends rather than returning a misleading success.
 
-These changes do not resend email, alter the audited employee record, or deploy anything to AWS. The workflow unit tests passed in GitHub Actions on commit `a858f635b09c7e85db775cc729e26df3a3122df1`; the deployment-script syntax check passed on commit `dbf61c630cbd5e01d8b91fb1159df752608361cd`. The latest documentation-only CI run was still in progress when this audit note was updated.
+These changes do not resend email, alter the audited employee record, or deploy anything to AWS.
+
+After the remediation Lambda is deployed, the audited employee can be repaired without restarting the completed Step Functions execution. First preview exactly one employee (no email is sent):
+
+```bash
+aws lambda invoke \
+  --function-name hrms-team-wp2-WorkflowFunction-GAuBPspQIQrF \
+  --region us-east-1 \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"action":"reconcile_completion_notifications","employee_id":"YOUR_EMPLOYEE_ID"}' \
+  /tmp/hrms-completion-preview.json
+cat /tmp/hrms-completion-preview.json
+```
+
+Only after reviewing the preview and verifying the recipient's SES eligibility, repeat with `"confirm_send":true`. That targeted operation updates employee lifecycle status and attempts only that employee's completion email; it does not start another onboarding execution or touch other employee records. The workflow unit tests passed in GitHub Actions on commit `a858f635b09c7e85db775cc729e26df3a3122df1`; the deployment-script syntax check passed on commit `dbf61c630cbd5e01d8b91fb1159df752608361cd`. The latest documentation-only CI run was still in progress when this audit note was updated.
 
 ## 5. Document storage and DynamoDB
 
