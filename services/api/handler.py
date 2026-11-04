@@ -17,6 +17,8 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+from services.workflow import callbacks as workflow_callbacks
+
 from services.identity.handler import (
     IdentityError,
     InvalidEmployeeInput,
@@ -430,14 +432,13 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
         if service_response.get("statusCode", 500) >= 400:
             return service_response
         try:
-            from services.workflow.callbacks import CallbackConflict, resume_stage
-            callback = resume_stage(
+            callback = workflow_callbacks.resume_stage(
                 employee_id, "policy_signoff", authorized=True,
                 table=_stages_table(stages_table),
             )
         except ValueError:
             callback = {"status": "accepted_waiting_for_policy_stage"}
-        except CallbackConflict:
+        except workflow_callbacks.CallbackConflict:
             callback = {"status": "callback_already_expired_or_submitted"}
         return _response(202, {"policy": json.loads(service_response.get("body", "{}")), "workflow": callback})
 
@@ -462,8 +463,7 @@ def _dispatch(event: dict[str, Any], *, employees_table: Any | None = None,
                     ":active": "in_progress",
                 },
             )
-            from services.workflow.callbacks import CallbackConflict, resume_stage
-            result = resume_stage(
+            result = workflow_callbacks.resume_stage(
                 employee_id, stage, authorized=True,
                 table=stage_table,
             )
