@@ -1,0 +1,48 @@
+erDiagram
+  EMPLOYEES ||--o{ ONBOARDING_STAGES : has
+  EMPLOYEES ||--o{ DOCUMENTS : submits
+  EMPLOYEES ||--o{ EQUIPMENT : assigned
+
+  EMPLOYEES {
+    string employee_id PK "UUID"
+    string cognito_sub "immutable Cognito subject"
+    string full_name
+    string email
+    string department
+    string role
+    string manager_id
+    string joining_date
+    string employment_type
+    string status
+    string execution_arn
+    string created_at
+  }
+
+  ONBOARDING_STAGES {
+    string employee_id PK
+    string stage SK
+    string status
+    string started_at
+    string completed_at
+    number reminder_count
+    string task_token "server-side only"
+    string correlation_id
+  }
+
+  DOCUMENTS {
+    string employee_id PK
+    string doc_type SK
+    string s3_key
+    string status
+    number file_size
+    string content_type
+    string validated_at
+  }
+
+  EQUIPMENT {
+    string asset_id PK
+    string type
+    string model
+    string status
+    string assigned_to
+  }
