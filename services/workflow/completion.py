@@ -98,18 +98,15 @@ def send_completion_notification(
         employees.update_item(
             Key={"employee_id": employee_id},
             UpdateExpression=(
-                "SET completion_email_status=:sending, "
-                "completion_email_started_at=:now, #employee_status=:complete"
+                "SET completion_email_status=:sending, completion_email_started_at=:now"
             ),
             ConditionExpression=(
                 "attribute_not_exists(completion_email_status) "
                 "OR completion_email_status=:failed"
             ),
-            ExpressionAttributeNames={"#employee_status": "status"},
             ExpressionAttributeValues={
                 ":sending": "sending",
                 ":failed": "failed",
-                ":complete": "complete",
                 ":now": timestamp,
             },
         )
@@ -169,11 +166,13 @@ def send_completion_notification(
         Key={"employee_id": employee_id},
         UpdateExpression=(
             "SET completion_email_status=:sent, completion_email_sent_at=:now, "
-            "completion_email_message_id=:message_id"
+            "completion_email_message_id=:message_id, #employee_status=:complete"
         ),
         ConditionExpression="completion_email_status=:sending",
+        ExpressionAttributeNames={"#employee_status": "status"},
         ExpressionAttributeValues={
             ":sent": "sent",
+            ":complete": "complete",
             ":sending": "sending",
             ":now": timestamp,
             ":message_id": response.get("MessageId", "accepted"),
