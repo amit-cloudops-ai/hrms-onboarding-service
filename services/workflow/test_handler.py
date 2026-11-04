@@ -85,11 +85,13 @@ class CompletionAndReminderTests(unittest.TestCase):
         self.assertEqual(result["completion_email_status"], "not_ready")
         send_email.assert_not_called()
 
-    def test_callback_completion_requires_token(self):
+    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
+    def test_callback_completion_requires_token(self, _all_complete):
         table=Mock()
         mark_stage_complete({"employee_id":"emp-1","stage":"document_collection"},table=table)
         self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
-    def test_policy_signoff_callback_completion(self):
+    @patch("handler._all_stages_complete", return_value=["it_provisioning"])
+    def test_policy_signoff_callback_completion(self, _all_complete):
         table=Mock()
         mark_stage_complete({"employee_id":"emp-1","stage":"policy_signoff"},table=table)
         self.assertIn("attribute_exists(task_token)",table.update_item.call_args.kwargs["ConditionExpression"])
