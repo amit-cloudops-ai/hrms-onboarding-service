@@ -9,8 +9,10 @@ import boto3
 from botocore.exceptions import ClientError
 try:
     from .completion import send_completion_notification
+    from .reconciliation import reconcile_completion_notifications
 except ImportError:  # Support direct Lambda module loading from CodeUri.
     from completion import send_completion_notification
+    from reconciliation import reconcile_completion_notifications
 
 VALID_STAGES=("document_collection","it_provisioning","policy_signoff","manager_intro")
 CALLBACK_STAGES=("document_collection","policy_signoff")
@@ -241,4 +243,6 @@ def lambda_handler(event,context):
     if action=="mark_stage_failed": return mark_stage_failed(event)
     if action=="send_reminder": return send_reminder(event)
     if action=="send_completion_notification": return send_completion_notification(event)
+    if action=="reconcile_completion_notifications":
+        return reconcile_completion_notifications(event, employees_table=boto3.resource("dynamodb").Table(os.environ.get("EMPLOYEES_TABLE","hrms-dev-employees")), stages_table=_table())
     raise ValueError("Unsupported workflow action")
