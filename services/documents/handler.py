@@ -306,13 +306,21 @@ def lambda_handler(event, context):
             return process_s3_upload(event)
 
         records = event.get("Records", [])
-        if (
-            isinstance(records, list)
-            and records
-            and isinstance(records[0], dict)
-            and records[0].get("eventSource") == "aws:s3"
-        ):
-            return process_s3_upload(event)
+        if isinstance(records, list):
+            s3_records = [
+                record for record in records
+                if isinstance(record, dict)
+                and record.get("eventSource") == "aws:s3"
+            ]
+            if s3_records:
+                # Process every record. If any record fails, let the exception
+                # reach Lambda so the batch is retried; prior records are
+                # idempotent and will be safely ignored on retry.
+                results = [
+                    process_s3_upload({"Records": [record]})
+                    for record in s3_records
+                ]
+                return all(results)
 
     try:
         if not isinstance(event, dict):
