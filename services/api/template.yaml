@@ -72,10 +72,12 @@ Resources:
 
   ApiFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: hrms-team-api
-      CodeUri: ../..
-      Handler: services.api.handler.lambda_handler
+      CodeUri: .
+      Handler: handler.lambda_handler
       Runtime: python3.12
       Timeout: 30
       MemorySize: 256
