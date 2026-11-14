@@ -7,21 +7,25 @@ This document records the contributors and work-package ownership for the Smart 
 | Contributor | GitHub | Work packages | Primary scope |
 |---|---|---|---|
 | Amit Madakatti | [@amit-cloudops-ai](https://github.com/amit-cloudops-ai) | WP1, WP2, WP5, shared integration | Identity, workflow orchestration, API authorization, infrastructure, cross-service integration and release coordination |
-| Gopi | [@gk78-lab](https://github.com/gk78-lab) | WP6, WP7 | Employee portal, HR dashboard, frontend data adapters, UI documentation and screenshots |
+| Gopi | [@gk78-lab](https://github.com/gk78-lab) · commit profile [@dggk78](https://github.com/dggk78) | WP6, WP7 | Employee portal, HR dashboard, frontend data adapters, UI documentation and screenshots. GitHub maps the original commit author identity to `dggk78`; this is why the repository contributor list uses that login. |
 | Sushmitha | [@sush-kush](https://github.com/sush-kush) | WP3, WP4 | Document service, upload validation, document events, stage handlers, tests and integration documentation |
 
 ## Contribution evidence
 
 ### Gopi — employee and HR interfaces
 
-- [PR #5 — New-hire portal and HR dashboard](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/5) — merged into the shared integration branch.
+- [PR #5 — New-hire portal and HR dashboard](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/5) — opened as `gk78-lab`, merged into the shared integration branch.
+- [WP6 portal implementation commit](https://github.com/amit-cloudops-ai/hrms-onboarding-service/commit/e4976df563048bb4757b54c7ccc430b07e705fa0).
+- [WP7 HR dashboard implementation commit](https://github.com/amit-cloudops-ai/hrms-onboarding-service/commit/2dcd15651674084e0fd9ca98b98442bce8d139fc).
+- [Frontend documentation and screenshots commit](https://github.com/amit-cloudops-ai/hrms-onboarding-service/commit/15681ffae051cb0845e286390b98fec39128e230).
 - Delivered the first employee-facing portal and HR operations dashboard, including mock API layers, UI states, documentation and screenshots.
 - The integrated application subsequently connected both interfaces to Cognito authentication and the WP5 API.
 
 ### Sushmitha — document and onboarding-stage services
 
-- [PR #6 — WP3 Document Service and WP4 Onboarding Stages](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/6) — original contribution PR; later marked superseded after the implementation was integrated and refined in the shared branch.
-- The contribution branch contains implementation and test commits authored by Sushmitha.
+- [PR #6 — WP3 Document Service and WP4 Onboarding Stages](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/6) — original contribution PR, authored by `sush-kush`; closed as superseded, not merged.
+- [Original contribution branch](https://github.com/amit-cloudops-ai/hrms-onboarding-service/tree/feature/wp3-sushmitha-documents) is retained as the source reference for her WP3/WP4 implementation and tests.
+- The later [PR #7 integration](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/7) and PRs [#11](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/11), [#12](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/12) and [#13](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/13) were authored by Amit. They are follow-up integration/hardening, not Sushmitha-authored PRs.
 - Follow-up integration and hardening evidence:
   - [PR #7 — WP2 to WP4 orchestration integration](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/7)
   - [PR #11 — S3 EventBridge upload-event integration](https://github.com/amit-cloudops-ai/hrms-onboarding-service/pull/11)
