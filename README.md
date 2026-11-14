@@ -179,6 +179,7 @@ The original team pull requests and author history are retained in GitHub. The d
 
 ## Documentation index
 
+- [Team contributors](docs/CONTRIBUTORS.md)
 - [Team playbook](docs/team-playbook.md)
 - [Work-package ownership](docs/team-work-packages.md)
 - [API contract](docs/api-contract.md)
