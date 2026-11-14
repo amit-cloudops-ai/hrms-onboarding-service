@@ -1,5 +1,7 @@
 # Team Playbook — Smart Employee Onboarding & Identity Service
 
+> **Historical team-development guide:** this document preserves the original collaboration model and work-package handoffs. For current development, `main` is canonical; follow [CONTRIBUTING.md](../CONTRIBUTING.md) for the current branch and pull-request workflow. The historical `team-dev` and `v1-solo` branches are retained as development history.
+
 This is the simple starting guide for all three contributors. Read it once, then keep it open while building. It explains what we are building, who owns each part, how the parts connect, and how to avoid breaking one another's work.
 
 - **Shared team branch:** `team-dev`
