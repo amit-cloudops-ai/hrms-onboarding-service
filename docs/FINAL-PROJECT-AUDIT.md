@@ -1,182 +1,124 @@
-# Final project audit — AWS team environment
+# Final project audit — public engineering summary
 
-**Snapshot date:** 4 November 2026  
-**Account / region:** `924422830139` / `us-east-1`  
-**Repository baseline:** `team-dev` at `114dfe7e512c7502efef14e7db8cfb179dce6446`  
-**Audit method:** read-only AWS CLI inventory supplied by the project owner, repository source review, and GitHub Actions status. No AWS resources or employee records were changed during this audit.
+**Audit snapshot:** 4 November 2026  
+**Region:** `us-east-1`  
+**Method:** read-only AWS inventory supplied by the project owner, source review and GitHub Actions evidence.
 
-## Executive verdict
+Account identifiers, user emails, API URLs, Cognito IDs, CloudFront URLs, resource ARNs, execution IDs and other environment-specific identifiers are intentionally omitted from this public summary.
 
-The team environment has the core AWS services deployed and the onboarding workflow has completed for the audited employee. The employee's four required stages are all `complete`, and all three required documents are `verified`.
+## Executive summary
 
-The employee record nevertheless remains `in_progress`. The completion notification record is `failed` with `AccessDenied`. The code currently couples employee lifecycle completion to successful SES delivery; this is a correctness defect. The remediation branch separates those two states and makes notification failure non-fatal to the onboarding workflow.
+The evaluation environment contained the core identity, API, workflow, document and stage services. The audit recorded the four required onboarding stage records as complete and all three required document records as verified for the inspected synthetic/evaluation journey.
 
-**The project is not yet verified end to end.** In particular, the actual SES denial is not explained by the IAM policy simulator result, the currently running Step Functions execution has not been identified, the deployed frontend configuration has not been inspected, and several deployed Lambda environment variables were omitted from the audit query. Do not describe the system as production-ready.
+The audit also found an employee lifecycle consistency defect: the employee record remained `in_progress` when the completion-email delivery record was `failed`. The workflow implementation was updated to separate lifecycle completion from notification delivery. The remediation records delivery state independently (`sending`, `sent`, `failed`) and provides preview-first, targeted reconciliation.
 
-## 1. AWS infrastructure inventory
+The source changes passed the final-readiness GitHub Actions validation. The merge did not deploy AWS resources, change IAM policies, mutate employee records, restart executions or send email.
 
-| Stack | Observed status | Notes |
+## 1. Infrastructure inventory
+
+The read-only snapshot showed the following service groups in successful stack states:
+
+| Service group | Observed state | Responsibility |
 |---|---|---|
-| `hrms-team-foundation` | `CREATE_COMPLETE` | Cognito and four DynamoDB tables |
-| `hrms-team-wp2` | `UPDATE_COMPLETE` | Workflow Lambda, Step Functions and reminder SNS topic |
-| `hrms-team-wp3` | `CREATE_COMPLETE` | Private document bucket, document Lambda, EventBridge rule and rejection SNS topic |
-| `hrms-team-wp4` | `CREATE_COMPLETE` | Simulated stage adapter Lambda |
-| `hrms-team-api` | `CREATE_COMPLETE` | HTTP API, JWT authorizer, routes and API Lambda |
-| `hrms-team-cloudfront-hosting-v2` | `CREATE_COMPLETE` | Portal and dashboard CloudFront distributions |
-| `hrms-team-static-hosting` | `CREATE_COMPLETE` | Additional Lambda Function URL hosting path |
-| `hrms-team-hosting` | `ROLLBACK_COMPLETE` | Earlier hosting stack; its resources were deleted |
+| Identity foundation | Successful | Cognito user pool/groups and DynamoDB tables |
+| Workflow | Successful update | Lambda workflow handler, Step Functions and reminder notifications |
+| Documents | Successful | Private S3 bucket, document Lambda, event-driven validation and HR notifications |
+| Stage adapters | Successful | Business-stage Lambda adapter |
+| API | Successful | API Gateway HTTP API, JWT authorizer, routes and API Lambda |
+| Static hosting | Successful | Frontend hosting resources |
+| Current CDN hosting | Successful | Employee portal and HR dashboard delivery |
+| Legacy hosting attempt | Rolled back | Earlier hosting stack; not the current deployment target |
 
-The two CloudFront URLs in the snapshot are:
+The deployment tooling was updated to reuse the observed hosting resources, require existing stacks in stable states, require an existing private same-region SAM artifact bucket and use interactive change-set confirmation. The script does not automatically recreate missing hosting resources or artifact buckets. These changes were source-validated; the updated deployment script was not run against AWS as part of the code merge.
 
-- Employee portal: `https://d1aozjt2t5kjtv.cloudfront.net`
-- HR dashboard: `https://d2i8jrjhff3cr3.cloudfront.net`
+## 2. Identity and API authorization
 
-The separate static-hosting stack also exposes two Lambda Function URLs. Their `AuthType` was not queried in the audit, so their direct-public access posture is unknown. The API CORS and Cognito callback/logout allowlists include both hosting paths and local development origins. The remediation script now designates CloudFront v2 as the canonical public origin; inspect the Function URL `AuthType` and usage before disabling the legacy URLs or removing their callback origins.
+The environment audit confirmed a Cognito-backed API boundary. The listed application routes used a JWT authorizer, and the API implementation adds server-side checks for:
 
-**Deployment-script defect — corrected in the remediation branch:** the original script expected the old `hrms-team-hosting` stack and its outputs. The audit shows that stack is `ROLLBACK_COMPLETE`, while the deployed CloudFront stack is named `hrms-team-cloudfront-hosting-v2` and the S3 buckets are owned by `hrms-team-static-hosting`. The remediation branch now reuses those two existing stacks, verifies their health and refuses to create/replace hosting resources automatically. It also verifies the configured SES sender identity, warns when SES remains sandboxed, reads back the selected HR administrator's `hr-admins` membership after assignment, requires all current stacks to exist in stable states, and requires an existing private same-region SAM artifact bucket. SAM no longer creates an artifact bucket implicitly and prompts for each change set. These script changes have not been run against AWS.
+- HR-only operations through the configured HR administrator group.
+- Employee self-service by matching the authenticated Cognito `sub` claim to the employee record's immutable `cognito_sub`.
+- Service-adapter invocation through backend-controlled configuration.
 
-## 2. Identity, API and authorization
+The audit confirmed HR-group membership for the account queried at that time. The actual identity used by a future operator must be checked independently.
 
-**Verified from AWS inventory:**
+The API Lambda's deployed environment configuration was not fully captured in the audit. Confirm required environment variables before exercising employee creation or downstream service calls.
 
-- Cognito user pool: `us-east-1_GUx6uZsFJ`
-- Public app client: `5659oiu8c5v4q83cq8j4uepb4n`
-- HR group: `hr-admins` exists, and the audit's `admin-list-groups-for-user` query for `amitmadakatti@gmail.com` returned `["hr-admins"]`. Membership is verified for that account.
-- API Gateway HTTP API: `m040hqrfd4`
-- API authorizer: Cognito JWT, issuer bound to the user pool and audience bound to the public app client.
-- All nine listed application routes use the JWT authorizer.
-- The API code authorizes employee self-service by immutable Cognito `sub` and checks the HR group for administrative operations.
+## 3. Workflow and stage lifecycle
 
-The deployed routes cover employee creation/listing, profile and progress reads, document status/upload URL, policy sign-off and the HR stage callback override.
+The intended workflow contains four stages:
 
-**Still to verify:** (1) if the HR dashboard is being accessed with a different Cognito username, verify that account's group membership too; `amitmadakatti@gmail.com` is already in `hr-admins`. (2) The audit's Lambda environment query did not include `COGNITO_USER_POOL_ID` for the API Lambda. The API template requires it for WP1 user creation. Confirm the actual deployed value before testing employee creation.
+1. `document_collection` — waits for required documents to be validated.
+2. `it_provisioning` — invokes the WP4 business adapter.
+3. `policy_signoff` — waits for the employee's policy acknowledgement callback.
+4. `manager_intro` — invokes the WP4 business adapter.
 
-## 3. Workflow and stage state
+Callback/task tokens remain server-side and are not returned to browser clients.
 
-The active state machine is `arn:aws:states:us-east-1:924422830139:stateMachine:hrms-team-onboarding`.
+The audited environment used `MODE=simulated` for WP4. IT provisioning and manager introduction therefore return deterministic demonstration outcomes; they do not create real third-party accounts, allocate physical equipment or schedule calendar events.
 
-Its definition contains the four intended stages:
+The audit observed one completed execution and one additional running execution. The latter's employee association and current stage were not included in the report. Inspect an execution's input and history before taking any operational action.
 
-1. `document_collection` — WP2 task-token callback, resumed after WP3 verifies all required uploads.
-2. `it_provisioning` — synchronous WP4 invocation.
-3. `policy_signoff` — WP2 task-token callback after versioned policy acceptance.
-4. `manager_intro` — synchronous WP4 invocation.
+## 4. Employee completion and SES delivery
 
-The audited employee has all four stage records in DynamoDB with status `complete`. The three required document metadata records are `verified`. The corresponding Step Functions execution is `SUCCEEDED`.
+For the inspected journey, all four stage records were complete and all three required document records were verified. The employee lifecycle record nevertheless remained `in_progress` because completion email delivery had failed.
 
-A second execution, `9dbad4cb-09bd-40a4-83c5-c13d1c66f35a`, was `RUNNING` at audit time. Its input and employee association were not included in the report. Do not stop or restart it until its execution input and current stage are inspected.
+The audit observed:
 
-WP4 is explicitly configured as `MODE=simulated`. IT account/equipment provisioning and manager introduction return demonstration results; they do not create real third-party accounts, allocate actual equipment, or schedule a real calendar event. This is acceptable for a clearly labelled mentor demo, not for live HR operations.
+- SES was operating in sandbox mode.
+- The configured sender identities were verified.
+- The IAM policy simulation allowed the examined send action/resource pair.
+- The stored delivery error was `AccessDenied`.
+- The recipient's SES verification status and the exact denial event were not established.
 
-## 4. Employee completion and SES incident
+The precise SES denial cause remains unresolved. Do not add broad IAM permissions based only on the stored error. Retrieve the specific Lambda invocation log or CloudTrail event and verify recipient eligibility before changing IAM or SES account settings.
 
-For the audited employee record:
+### Source-level correction
 
-- All four onboarding stage records: `complete`
-- Required document records: 3 of 3 `verified`
-- Employee lifecycle status: `in_progress`
-- Completion email status: `failed`
-- Stored completion email error code: `AccessDenied`
+The final workflow changes:
 
-The workflow Lambda's inline IAM policy contains `ses:SendEmail` scoped to the verified sender identity. The IAM policy simulator returned `allowed` for that exact action/resource pair. The Lambda role has no permissions boundary in the audit output.
+- Persist employee lifecycle completion once all four required stages are complete, independently of email delivery.
+- Track notification delivery separately as `sending`, `sent` or `failed`.
+- Treat definitive delivery errors as notification failures rather than onboarding failures.
+- Keep ambiguous transport outcomes in `sending` to avoid duplicate email delivery.
+- Use one completion-notification trigger in the Step Functions workflow.
+- Make reconciliation preview-first and support a targeted employee identifier for controlled recovery.
 
-SES account state:
+These source changes passed automated validation. They do not automatically repair an existing AWS record or send an email; that requires an approved, targeted runtime operation after recipient eligibility and deployed code are verified.
 
-- Sending enabled: true
-- Production access: false (SES sandbox)
-- Sender identities `amitmadakatti@gmail.com` and `amitpm.work@gmail.com`: verified
-- Daily quota: 200; maximum send rate: 1 per second
+## 5. Documents and data protection
 
-The SES sandbox can restrict recipients to verified identities. The employee recipient address was not included in the audit query, so recipient verification is not established. However, the stored error is `AccessDenied`, and the IAM simulation is allowed; neither fact alone proves the underlying SES denial reason.
+The document flow uses short-lived, scoped presigned upload URLs and private S3 storage. The service validates the uploaded object's actual size, content type and file signature before marking a document verified. Rejected uploads can be retried under the documented object-key and status rules.
 
-The audit's CloudWatch filter returned no matching `AccessDenied` log events. The exact SES request failure therefore remains **unresolved**. Do not add another broad IAM policy. Retrieve the specific Lambda invocation log/CloudTrail event and verify the recipient identity before changing permissions or requesting SES production access.
+The public API must never expose S3 object keys, bucket names, callback task tokens, credentials or document contents. Use synthetic employees and dummy files for evaluation.
 
-### Code correction on the remediation branch
+## 6. Remaining runtime and operational checks
 
-- Persist employee `status=complete` and `onboarding_completed_at` once all required stages are complete, independently of email delivery.
-- Keep notification delivery state separate: `sending`, `sent`, or `failed`.
-- Treat definitive SES errors as notification failures that can be retried without restarting onboarding.
-- Keep ambiguous network outcomes in `sending` so automatic retries cannot duplicate a message.
-- Keep one notification invocation point: the Step Functions `WorkflowComplete` state. Stage completion only persists stage lifecycle state.
-- Make the reconciliation operation report failed sends rather than returning a misleading success.
+Before using the environment for real employee operations, complete and record:
 
-These changes do not resend email, alter the audited employee record, or deploy anything to AWS.
+1. Verify deployed Lambda environment variables for API and document integrations.
+2. Inspect any currently running Step Functions execution before recovery or replay.
+3. Resolve the SES denial from the exact runtime event and confirm recipient eligibility.
+4. Confirm the deployed portal and dashboard use the intended live API and Cognito configuration.
+5. Run a controlled end-to-end journey with synthetic identities and dummy documents.
+6. Verify callback, retry, timeout, duplicate-event and failure-path behavior in the deployed environment.
+7. Review IAM least privilege and Cognito MFA configuration.
+8. Define backups, restore testing, data retention/deletion, CloudWatch alarms, log retention, tracing, incident response and cost budgets.
+9. Review policy text and employee-data handling with the appropriate HR/legal stakeholders.
+10. Integrate approved real IT provisioning and manager-calendar providers before enabling those operations.
 
-After the remediation Lambda is deployed, the audited employee can be repaired without restarting the completed Step Functions execution. First preview exactly one employee (no email is sent):
+## 7. Validation and deployment boundary
 
-```bash
-aws lambda invoke \
-  --function-name hrms-team-wp2-WorkflowFunction-GAuBPspQIQrF \
-  --region us-east-1 \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"action":"reconcile_completion_notifications","employee_id":"YOUR_EMPLOYEE_ID"}' \
-  /tmp/hrms-completion-preview.json
-cat /tmp/hrms-completion-preview.json
-```
+The final-readiness GitHub Actions run passed backend tests, targeted reconciliation tests, Step Functions/SAM validation, frontend lint/build, dependency audit, CloudFormation validation, deployment-script syntax and backend SAM builds.
 
-Only after reviewing the preview and verifying the recipient's SES eligibility, repeat with `"confirm_send":true`. That targeted operation updates employee lifecycle status and attempts only that employee's completion email; it does not start another onboarding execution or touch other employee records. The full GitHub Actions validation passed on commit `4326ae37e9f363d56bbc183e207ad9d2d0821030`: backend unit tests (including targeted reconciliation), Step Functions/SAM template validation, frontend lint/build, production dependency audit, CloudFormation lint, deployment-script syntax and backend SAM builds. Documentation validation also passed on `ff58b57db1a3b684766fcc5a697b5595ca193dbf`. The changes are available in draft PR #16; no merge or AWS deployment has occurred.
+[View the validation run](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/41800581911).
 
-## 5. Document storage and DynamoDB
+CI is validation-only. No AWS deployment or resource mutation is implied by a passing workflow or a source merge. Any deployment must be separately approved, use the guarded scripts and reviewed CloudFormation change sets, and follow the cost and cleanup documentation.
 
-The four DynamoDB tables are active and use `PAY_PER_REQUEST` billing:
+## Related documentation
 
-- `hrms-team-employees`
-- `hrms-team-onboarding-stages`
-- `hrms-team-documents`
-- `hrms-team-equipment`
-
-The employee table has `status-index` and `cognito-sub-index`; the latter supports immutable-subject lookup.
-
-The document bucket has S3 Block Public Access enabled and default SSE-S3 AES-256 encryption. Its CORS configuration allows PUT from the portal CloudFront origin and `http://localhost:5173`. The EventBridge object-created integration is present in the bucket notification configuration and the WP3 stack has an enabled object-created rule.
-
-The audit reports DynamoDB continuous-backup status as enabled but point-in-time recovery as disabled for the tables. Recovery settings should be deliberately selected before production; do not enable PITR without reviewing its ongoing cost.
-
-**Environment values still to verify:** the audit's Lambda query omitted WP3's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME`, and omitted the API Lambda's `COGNITO_USER_POOL_ID`. The WP3 template requires these values. Confirm them before claiming the document callback and employee-creation paths are fully wired in the deployed environment.
-
-## 6. Frontend and hosting
-
-Both frontend codebases support a real HTTP API adapter and a mock adapter. Their selection logic defaults to mock mode unless `VITE_USE_MOCK=false`. The checked-in deployment script writes `VITE_USE_MOCK=false` and API/Cognito settings before building, but the audit did not inspect the actual deployed frontend bundles or their embedded configuration.
-
-The deployment script also targets the rolled-back hosting stack rather than the currently observed v2 CloudFront stack. This is a release-blocking infrastructure/documentation mismatch. No hosting stack should be recreated, deleted, or updated until the canonical hosting path and template ownership are settled.
-
-## 7. Repository and CI
-
-The local audit checkout was clean on `team-dev` at `a752f72`. The GitHub `team-dev` branch is one commit ahead at `114dfe7` (`Fix automatic onboarding completion email`). The latest GitHub Actions run for that commit completed successfully.
-
-Use the GitHub `team-dev` head as the integration baseline. The local checkout in the audit report is stale by one commit; do not push from it until it has been fast-forwarded and its working tree rechecked.
-
-Documentation gaps found in the repository include a placeholder architecture page and data-model/API-contract examples still naming `hrms-dev-*` tables while the deployed team environment uses `hrms-team-*`.
-
-## 8. Release gates
-
-| Gate | Status | Required evidence |
-|---|---|---|
-| Core AWS stacks exist | Verified | CloudFormation inventory |
-| Cognito JWT authorization on API routes | Verified | API Gateway route/authorizer inventory |
-| Queried Cognito admin account belongs to `hr-admins` | Verified for `amitmadakatti@gmail.com` | If signing in with a different account, verify that account separately |
-| All four audited employee stages complete | Verified | Consistent DynamoDB query |
-| Required documents verified | Verified | Document metadata query |
-| Employee lifecycle status independent of SES | Implemented in remediation branch; workflow unit tests passed; not deployed | Later approved deployment + read-only record check |
-| SES completion email actually delivered | Unverified / failed in snapshot | CloudWatch/CloudTrail cause, recipient verification, successful test to verified recipient |
-| WP3 callback environment fully configured | Unverified | Read actual WP3 Lambda environment variables |
-| API Cognito pool environment configured | Unverified | Read actual API Lambda environment variables |
-| Second running execution understood | Incomplete | Describe execution input/current state; do not stop it blindly |
-| Frontends use live API rather than mock data | Unverified | Inspect deployed build configuration and exercise both apps |
-| Legacy Lambda Function URL access posture | Unverified | Read `get-function-url-config` AuthType for both static functions; remove only after confirming no use |
-| Existing private SAM artifact bucket | Unverified | Confirm a same-region bucket with all S3 Block Public Access flags enabled; deployment script refuses to create one |
-| Hosting deployment script matches deployed stack | Script corrected in remediation branch; not run against AWS | Review script diff, then approve deployment separately |
-| Real IT/calendar integrations | Intentionally simulated | Keep clearly labelled for mentor demo |
-| Production operational readiness | Incomplete | MFA policy, recovery/retention, monitoring, backups, incident runbooks and approved real providers |
-
-## 9. Safety and deployment policy
-
-Until the release gates are closed:
-
-- Do not recreate, delete, or update CloudFormation stacks.
-- Do not modify IAM policies broadly to chase the SES error.
-- Do not restart, stop, or reseed onboarding executions.
-- Do not rewrite existing employee or document records to make the dashboard appear complete.
-- Do not enable paid backup/hosting features without reviewing cost.
-- Validate code and templates locally/through CI first; deploy only after a separate explicit approval.
-
-The target for this branch is a reliable, reproducible **simulated mentor demonstration** with clear production limitations—not a claim that real IT provisioning or production HR operations are already implemented.
+- [Implementation status](implementation-status.md)
+- [Architecture](architecture.md)
+- [API contract](api-contract.md)
+- [Data model](data-model.md)
+- [Cost estimate](COST-ESTIMATE.md)
+- [Mentor demo guide](MENTOR-DEMO-GUIDE.md)
