@@ -1,11 +1,52 @@
-# WP2 workflow
+# WP2 — Workflow orchestration
 
-WP2 owns Step Functions orchestration, task-token lifecycle, reminders and canonical onboarding-stage state. Document collection and policy sign-off are callback stages. IT provisioning and manager introduction are synchronous WP4 business stages. WP4 receives no task tokens and never writes canonical lifecycle fields.
+WP2 owns the canonical onboarding lifecycle: Step Functions orchestration, stage state transitions, callback/task-token handling, reminders, failure correlation and completion notification.
 
-WP3 signals document verification through the trusted WP2 resume action. WP5 records employee policy acceptance through WP4 and submits the policy-signoff callback. MODE is required; simulated is the only supported demonstration mode until real provider adapters are configured.
+## Four-stage workflow
 
-## Day 1 completion email
+1. `document_collection` — waits for WP3 to validate all required documents and submit the trusted callback.
+2. `it_provisioning` — invokes the WP4 business adapter synchronously.
+3. `policy_signoff` — waits for the employee's versioned policy acknowledgement callback.
+4. `manager_intro` — invokes the WP4 business adapter synchronously.
 
-After the four persisted stages (`document_collection`, `it_provisioning`, `policy_signoff`, and `manager_intro`) are complete, the final Step Functions task sends the employee a Day 1-ready email. WP2 claims the send in the employee record before calling SES and records the SES message ID after acceptance. Retries skip records already marked `sent`; records left `sending` require SES reconciliation before an operator clears the claim.
+WP2 owns canonical stage lifecycle transitions. WP4 receives no Step Functions task tokens and does not write canonical onboarding lifecycle fields. Callback tokens remain server-side and must never be returned to the browser or written to ordinary logs.
 
-For employees who completed onboarding before this notification was deployed, invoke the WP2 Lambda with `{"action":"reconcile_completion_notifications"}` to preview one bounded page (25 records by default). The response masks email addresses and returns `next_cursor` when another page exists. Continue previewing with `exclusive_start_key` set to that cursor. Only after reviewing eligible employee IDs and confirming SES recipient eligibility should the caller set `confirm_send: true`; the action then sends only for records whose four required stages are complete. Page size is limited to 1–100. SES sandbox accounts can send only to verified recipients.
+## Completion and notification state
+
+Employee lifecycle completion and email delivery are independent:
+
+- The employee becomes `complete` after all four required stage records are persisted as complete.
+- Completion-email delivery is tracked separately as `sending`, `sent` or `failed`.
+- A definitive SES failure is recorded as a notification failure and must not keep an otherwise complete employee in `in_progress`.
+- An ambiguous transport outcome remains `sending` until reconciled; do not blindly retry and risk duplicate messages.
+- The Step Functions `WorkflowComplete` state is the single completion-email trigger.
+
+## Reconciliation
+
+The reconciliation action is preview-first and paginated. It masks email addresses in preview output, skips incomplete/already-sent/in-progress records and requires explicit `confirm_send: true` before sending.
+
+For a controlled recovery, the action can target one `employee_id`. Review the returned preview and verify recipient eligibility before requesting a send. Reconciliation does not restart a completed onboarding execution.
+
+## Tests
+
+From the repository root:
+
+```bash
+(cd services/workflow && python -m unittest test_handler test_completion test_reconciliation test_callbacks -v)
+```
+
+The tests use mocks; they do not prove live Step Functions or SES delivery.
+
+## Deployment configuration
+
+The workflow template receives the environment-specific employee/stage table names, WP4 function name, state-machine configuration and notification settings. Standalone defaults may use `hrms-dev-*`; the team environment uses `hrms-team-*`.
+
+WP4 currently runs in `simulated` mode for the evaluation environment. Real provisioning and manager-calendar providers must be configured and separately validated before those operations are enabled.
+
+## Safety
+
+- Never log or expose callback task tokens.
+- Keep retries bounded and side effects idempotent.
+- Inspect an active execution before recovery or replay.
+- Do not run reconciliation with `confirm_send: true` until the target employee and SES recipient eligibility have been reviewed.
+- CI validates source and templates; it does not deploy AWS resources.
