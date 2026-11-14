@@ -1,47 +1,54 @@
-# Implementation status — team integration
+# Implementation status
 
-**Current baseline:** GitHub `team-dev` at `114dfe7`.  
-**AWS snapshot:** 4 November 2026, `us-east-1`.  
-**Evidence and release gates:** [Final project audit](FINAL-PROJECT-AUDIT.md).
+**Repository:** `amit-cloudops-ai/hrms-onboarding-service`  
+**Environment snapshot:** 4 November 2026 · `us-east-1`  
+**Architecture and evidence:** [Architecture](architecture.md) · [Final project audit](FINAL-PROJECT-AUDIT.md) · [API contract](api-contract.md) · [Data model](data-model.md)
 
-## Implemented components
+## Implemented system
 
-- **WP1 Identity:** employee input validation, Cognito user creation, Employee group assignment and immutable Cognito-subject linking.
-- **WP2 Workflow:** Step Functions orchestration, private callback tokens for document collection and policy sign-off, reminders, synchronous WP4 invocation, correlation-bound stage completion/failure and completion notification.
-- **WP3 Documents:** presigned S3 uploads, document metadata, S3 object validation, rejected-document notification and trusted WP2 document callback.
-- **WP4 Stages:** versioned policy acknowledgement plus simulated IT provisioning and manager introduction.
-- **WP5 API:** Cognito JWT authorizer, HR-group checks, immutable-subject employee authorization and WP3/WP4 service adapters.
-- **WP6/WP7:** employee portal and HR dashboard with separate mock and HTTP API adapters.
+| Work package | Scope | Implementation |
+|---|---|---|
+| WP1 — Identity | Employee profile and Cognito identity lifecycle | Implemented |
+| WP2 — Workflow | Step Functions orchestration, callbacks, reminders, completion and reconciliation | Implemented |
+| WP3 — Documents | Presigned uploads, private S3 storage, validation, status and HR review | Implemented |
+| WP4 — Stage adapters | Policy acknowledgement, IT provisioning and manager introduction | Implemented with simulated business adapters |
+| WP5 — API | Cognito-authorized HTTP API, HR role checks and employee ownership checks | Implemented |
+| WP6 — Employee portal | Authenticated employee onboarding experience | Implemented |
+| WP7 — HR dashboard | HR employee pipeline and administrative workflows | Implemented |
+| Shared | Infrastructure templates, deployment guardrails, documentation and CI validation | Implemented |
 
-## AWS evidence
+## Automated validation
 
-The team foundation, WP2, WP3, WP4 and WP5 CloudFormation stacks were present and in successful stack states in the 4 November audit. The API Gateway routes were configured with a Cognito JWT authorizer. The audited employee had all four stage records complete and all three required documents verified.
+The final-readiness GitHub Actions run completed successfully on the integration branch. It validated:
 
-The employee record still showed `in_progress` because the completion email had failed. The IAM policy simulator allowed `ses:SendEmail`, while the SES account remained in the sandbox. The exact SES denial cause is not established. See the audit before changing IAM or SES settings.
+- Backend unit and regression tests, including completion-notification reconciliation.
+- Step Functions definition and all four SAM templates.
+- Employee portal and HR dashboard lint and production builds.
+- Production dependency audit.
+- CloudFormation lint and deployment-script syntax.
+- SAM builds for the backend services without deploying resources.
 
-## Current remediation branch
+[View the final-readiness validation run](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/runs/41800581911).
 
-The branch `feature/final-demo-readiness` separates employee lifecycle completion from email delivery, removes the duplicate completion-email trigger from stage persistence, makes reconciliation report failed notification attempts, and adds a targeted single-employee recovery path. The full GitHub Actions validation passed on commit `4326ae3`, including targeted-reconciliation tests, frontend lint/build, SAM builds, CloudFormation validation and the no-new-resource deployment-script checks. These changes require final CI success and a separately approved deployment before they can be considered active in AWS.
+CI validates source, templates and build artifacts. It does not prove every live AWS runtime path and does not deploy infrastructure.
 
-## Remaining verification gates
+## AWS evaluation evidence
 
-1. The queried Cognito account `amitmadakatti@gmail.com` is already in `hr-admins`; verify only if the dashboard uses a different login account.
-2. Inspect the running Step Functions execution before taking any action on it.
-3. Confirm the WP3 Lambda's `DOCUMENTS_BUCKET`, `SNS_TOPIC_ARN` and `WORKFLOW_FUNCTION_NAME` values.
-4. Confirm the API Lambda's `COGNITO_USER_POOL_ID` value.
-5. Resolve the SES `AccessDenied` using the exact Lambda log/CloudTrail event and verify the employee recipient is eligible in the SES sandbox.
-6. Verify the deployed portal and dashboard use `VITE_USE_MOCK=false` and the deployed API/Cognito endpoints.
-7. Reconcile the hosting stack names and the deployment script before another deployment.
-8. Run a controlled end-to-end test with non-sensitive test identities after approval.
+The 4 November 2026 read-only environment audit recorded the core identity, API, workflow, document and stage services in successful CloudFormation states. It also recorded successful HR/employee access paths and an onboarding execution with all four stage records complete and all three required documents verified.
 
-## Production limitations
+The audit identified a correctness issue where employee lifecycle completion was coupled to SES delivery. The final workflow changes separate the employee lifecycle state from the completion-email delivery state and add targeted, preview-first reconciliation. These source changes were validated by CI; no AWS resource or employee record was changed by the source merge.
 
-- WP4 is deliberately simulated. No approved IT account/equipment or calendar/manager-introduction provider exists.
-- The `company_policy` v1 acknowledgement is a demo placeholder, not a legally sufficient production policy record.
-- Cognito MFA is optional in the evaluation pool.
-- DynamoDB point-in-time recovery was disabled in the audit snapshot.
-- CloudWatch alarms, retention, tracing, alert routing, access logging, incident response and deletion/retention policy need production design.
-- Browser tokens are held in `sessionStorage`; evaluate a BFF using HttpOnly/Secure cookies and complete an XSS/CSP review before production.
-- The checked-in hosting deployment script is not aligned with the currently observed CloudFront v2 and Lambda Function URL stacks.
+See [the sanitized final project audit](FINAL-PROJECT-AUDIT.md) for the evidence and remaining runtime checks.
 
-**Release classification:** deployable simulated mentor demo after the remaining verification gates; not production-ready for real employee operations.
+## Operational boundaries
+
+- WP4 uses deterministic simulated adapters for IT provisioning and manager introduction. External account/equipment provisioning and calendar integrations are not configured.
+- SES delivery depends on verified sender configuration, recipient eligibility and the AWS account's SES state. The audited SES denial requires investigation from the specific runtime event before changing IAM.
+- The audit did not verify every API Lambda environment variable, frontend deployment mode or currently running workflow execution.
+- Cognito MFA, backup/recovery settings, monitoring, log retention, incident response, data retention and privacy controls require environment-specific review before real employee operations.
+- The browser authentication implementation stores tokens in session storage; review a backend-for-frontend approach, CSP and XSS controls for a production deployment.
+- Use synthetic employee identities and dummy documents for evaluation.
+
+## Release and deployment discipline
+
+The canonical source branch is `main`. CI is validation-only. Any AWS deployment must be separately approved, use the guarded deployment scripts, review CloudFormation change sets, verify account and region, and follow the cost and cleanup runbooks.
