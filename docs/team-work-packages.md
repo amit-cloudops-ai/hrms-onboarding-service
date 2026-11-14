@@ -1,5 +1,7 @@
 # Team Work Packages and Integration Guide
 
+> **Historical ownership and integration record:** this guide documents the original team work-package split. The canonical source branch is now `main`; use [CONTRIBUTING.md](../CONTRIBUTING.md) for current changes. Contributor attribution and pull-request evidence are collected in [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
 **Shared integration branch:** `team-dev`  
 **Stable branch:** `main`  
 **Region:** `us-east-1`  
