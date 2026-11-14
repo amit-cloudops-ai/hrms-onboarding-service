@@ -1,0 +1,205 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: WP3 employee document collection service
+
+Parameters:
+  EmployeesTableName:
+    Type: String
+    Description: Name of the existing employees DynamoDB table
+
+  DocumentsTableName:
+    Type: String
+    Default: hrms-team-documents
+    Description: Name of the existing documents DynamoDB table
+
+  WorkflowFunctionName:
+    Type: String
+    Description: WP2 workflow support Lambda name used for the trusted document-completion callback.
+
+  UploadAllowedOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Exact employee portal origin; replace before deployment
+
+  NotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional HR administrator email for rejected-document alerts.
+
+  UploadUrlTtlSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 1
+    MaxValue: 604800
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+
+Resources:
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      BucketName: !Sub 'hrms-${AWS::AccountId}-${AWS::Region}-hrms-team-documents-documents'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentDocumentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref UploadAllowedOrigin
+            AllowedMethods:
+              - PUT
+            AllowedHeaders:
+              - Content-Type
+            ExposedHeaders:
+              - ETag
+            MaxAge: 300
+
+  DocumentsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt DocumentsBucket.Arn
+              - !Sub '${DocumentsBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DocumentRejectedTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: WP3 rejected document notifications
+
+  RejectedDocumentEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      TopicArn: !Ref DocumentRejectedTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  DocumentsObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Validate objects uploaded to the team documents bucket
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref DocumentsBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt DocumentsFunction.Arn
+          Id: DocumentsFunctionTarget
+
+  DocumentsFunctionEventBridgePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DocumentsFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DocumentsObjectCreatedRule.Arn
+
+  DocumentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub hrms-team-documents-${AWS::StackName}
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          DOCUMENTS_TABLE: !Ref DocumentsTableName
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          SNS_TOPIC_ARN: !Ref DocumentRejectedTopic
+          WORKFLOW_FUNCTION_NAME: !Ref WorkflowFunctionName
+          UPLOAD_URL_TTL_SECONDS: !Ref UploadUrlTtlSeconds
+      Policies:
+        - Statement:
+            - Sid: ReadEmployeeRecords
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}
+
+            - Sid: ManageDocumentMetadata
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DocumentsTableName}
+
+            - Sid: ManageDocumentObjects
+              Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource: !Sub ${DocumentsBucket.Arn}/*
+
+            - Sid: InvokeTrustedWP2Callback
+              Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${WorkflowFunctionName}'
+
+            - Sid: NotifyHR
+              Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref DocumentRejectedTopic
+
+Outputs:
+  DocumentsFunctionArn:
+    Description: WP3 Lambda function ARN for WP5 integration
+    Value: !GetAtt DocumentsFunction.Arn
+
+  DocumentsFunctionName:
+    Description: WP3 Lambda function name for WP5 and event testing
+    Value: !Ref DocumentsFunction
+
+  DocumentsBucketName:
+    Description: Private document storage bucket
+    Value: !Ref DocumentsBucket
+
+  RejectedDocumentTopicArn:
+    Description: SNS topic for rejected document notifications
+    Value: !Ref DocumentRejectedTopic

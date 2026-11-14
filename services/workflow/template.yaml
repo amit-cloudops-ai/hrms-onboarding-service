@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HRMS WP2 team onboarding workflow with human callbacks and synchronous WP4 stages.
+Parameters:
+  StagesTableName:
+    Type: String
+    Default: hrms-dev-onboarding-stages
+  EmployeesTableName:
+    Type: String
+    Default: hrms-dev-employees
+  StagesFunctionName:
+    Type: String
+    Description: WP4 Lambda function name returned by the WP4 stack.
+  Mode:
+    Type: String
+    Default: simulated
+    AllowedValues: [simulated, real]
+    Description: Deployment-controlled mode. Real mode requires approved provider adapters.
+  NotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional HR administrator email for workflow reminder notifications.
+  CompletionEmailSource:
+    Type: String
+    Default: ''
+    Description: Verified SES sender email address for employee Day 1 completion messages.
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+  HasCompletionEmailSource: !Not [!Equals [!Ref CompletionEmailSource, '']]
+
+Resources:
+  WorkflowReminderTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: hrms-team-onboarding-reminders
+
+  WorkflowReminderEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+      TopicArn: !Ref WorkflowReminderTopic
+
+  WorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      CodeUri: .
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          STAGES_TABLE: !Ref StagesTableName
+          EMPLOYEES_TABLE: !Ref EmployeesTableName
+          COMPLETION_EMAIL_SOURCE: !Ref CompletionEmailSource
+          REMINDER_TOPIC_ARN: !Ref WorkflowReminderTopic
+          STAGES_FUNCTION_NAME: !Ref StagesFunctionName
+          MODE: !Ref Mode
+      Policies:
+        - Statement:
+            - Sid: ReadAndUpdateCanonicalStageRecords
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:UpdateItem]
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${StagesTableName}'
+            - Sid: ReadAndUpdateEmployeeCompletionStatus
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
+              Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EmployeesTableName}'
+            - Sid: PublishWorkflowReminders
+              Effect: Allow
+              Action: [sns:Publish]
+              Resource: !Ref WorkflowReminderTopic
+            - !If
+              - HasCompletionEmailSource
+              - Sid: SendEmployeeCompletionEmail
+                Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${CompletionEmailSource}'
+              - !Ref AWS::NoValue
+            - Sid: InvokeWP4BusinessHandler
+              Effect: Allow
+              Action: [lambda:InvokeFunction]
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}'
+                - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagesFunctionName}:*'
+            - Sid: ResumeCallbackTasks
+              Effect: Allow
+              Action: [states:SendTaskSuccess]
+              Resource: '*'
+
+  OnboardingStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: hrms-team-onboarding
+      Type: STANDARD
+      DefinitionUri: state_machine.asl.json
+      DefinitionSubstitutions:
+        WorkflowFunctionArn: !GetAtt WorkflowFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowFunction
+
+Outputs:
+  StateMachineArn:
+    Description: Team development onboarding state machine ARN.
+    Value: !Ref OnboardingStateMachine
+  WorkflowFunctionName:
+    Description: WP2 workflow support Lambda name.
+    Value: !Ref WorkflowFunction
+  ReminderTopicArn:
+    Description: Team development reminder topic ARN.
+    Value: !Ref WorkflowReminderTopic

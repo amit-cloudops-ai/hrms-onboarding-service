@@ -1,0 +1,64 @@
+flowchart TB
+  subgraph Actors
+    HR[HR administrator]
+    NH[New hire]
+  end
+
+  subgraph Web["Web applications"]
+    DASH[HR dashboard]
+    PORTAL[Employee onboarding portal]
+  end
+
+  subgraph Identity["Identity and API boundary"]
+    COG[Cognito User Pool and Hosted UI]
+    API[API Gateway HTTP API with JWT authorizer]
+    APIL[WP5 API Lambda]
+  end
+
+  subgraph Orchestration["Onboarding orchestration"]
+    ID[WP1 Identity Lambda]
+    SFN[WP2 Step Functions Standard workflow]
+    WFL[WP2 Workflow Lambda]
+    STAGE[WP4 Stage Lambda - simulated mode]
+  end
+
+  subgraph Data["Persistent data"]
+    EMP[(DynamoDB Employees)]
+    ST[(DynamoDB Onboarding Stages)]
+    DOC[(DynamoDB Documents)]
+    S3[(Private S3 document bucket - SSE)]
+  end
+
+  subgraph Messaging["Notifications"]
+    SES[SES invitation email]
+    SNS[SNS HR notifications and reminders]
+  end
+
+  HR --> DASH
+  NH --> PORTAL
+  DASH --> COG
+  PORTAL --> COG
+  DASH --> API
+  PORTAL --> API
+  COG --> API
+  API --> APIL
+  APIL --> ID
+  ID --> EMP
+  ID --> COG
+  ID --> SES
+  APIL --> SFN
+  SFN --> WFL
+  WFL --> ST
+  SFN --> STAGE
+  STAGE --> ST
+  APIL --> DOC
+  PORTAL -->|presigned upload| S3
+  S3 -->|object-created event| DOC
+  DOC -->|verified documents callback| WFL
+  DOC --> SNS
+  WFL --> SNS
+
+  classDef actor fill:#eef2ff,stroke:#64748b,color:#0f172a
+  classDef aws fill:#fff7ed,stroke:#c2410c,color:#431407
+  class HR,NH actor
+  class COG,API,APIL,ID,SFN,WFL,STAGE,EMP,ST,DOC,S3,SES,SNS aws

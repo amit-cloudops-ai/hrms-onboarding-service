@@ -1,0 +1,59 @@
+erDiagram
+  EMPLOYEES ||--o{ ONBOARDING_STAGES : has
+  EMPLOYEES ||--o{ DOCUMENTS : submits
+  EMPLOYEES ||--o{ EQUIPMENT : assigned
+
+  EMPLOYEES {
+    string employee_id PK "DynamoDB partition key"
+    string cognito_sub "GSI cognito-sub-index partition key"
+    string status "GSI status-index partition key"
+    string full_name
+    string email
+    string department
+    string role
+    string manager_id
+    string joining_date
+    string employment_type
+    string execution_arn
+    string created_at
+  }
+
+  ONBOARDING_STAGES {
+    string employee_id PK "DynamoDB partition key"
+    string stage SK "DynamoDB sort key"
+    string status
+    string started_at
+    string completed_at
+    string failed_at
+    string failure_code
+    string correlation_id
+    number reminder_count
+    string task_token "server-side only"
+    boolean documents_verified
+    string policy_id
+    string policy_version
+    boolean policy_accepted
+    string policy_accepted_at
+    string policy_accepted_by
+    boolean admin_override
+    string admin_override_by
+    string admin_override_at
+  }
+
+  DOCUMENTS {
+    string employee_id PK "DynamoDB partition key"
+    string doc_type SK "DynamoDB sort key"
+    string s3_key
+    string status
+    number file_size
+    string content_type
+    string validated_at
+  }
+
+  EQUIPMENT {
+    string asset_id PK "DynamoDB partition key"
+    string type
+    string model
+    string status
+    string assigned_to
+  }
