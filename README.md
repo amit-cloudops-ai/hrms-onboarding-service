@@ -3,7 +3,7 @@
 Automated new-hire onboarding on AWS: from offer acceptance to a fully ready Day 1.
 This is the identity spine of the HRMS. It creates the canonical employee record every other service refers to.
 
-**Evaluation:** 4 November 2026 | **Region:** us-east-1 | **Naming:** hrms-dev-<component>
+**Evaluation:** 4 November 2026 | **Region:** us-east-1 | **Team environment:** hrms-team-* (standalone development template defaults may use hrms-dev-*)
 
 ## What it does
 1. Creates an employee profile (UUID) in DynamoDB and a Cognito login, and emails an invite via SES.
@@ -41,4 +41,4 @@ Then read:
 
 No secrets in Git. No direct pushes to main. Team changes go through feature branches and pull requests into team-dev. Stay in your owned folder. Ask before changing the shared API contract, data model, or workflow payloads.
 
-**Implementation status:** these documents describe the agreed design and team workflow; verify infrastructure, deployed AWS resources, and end-to-end tests before claiming the full system is deployed.
+**Implementation status:** see [the final project audit](docs/FINAL-PROJECT-AUDIT.md) for the evidence-based AWS snapshot, known defects, unresolved checks and release gates. WP4 is simulated; this repository is a mentor-demo build, not a production HR platform.
