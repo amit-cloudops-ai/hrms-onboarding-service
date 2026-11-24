@@ -2,6 +2,16 @@
 
 An AWS serverless employee-onboarding system that connects identity provisioning, document collection, workflow orchestration, HR operations and employee self-service in one integrated application.
 
+## F13 Technologies Internship Context
+
+**Internship:** AWS Cloud Intern (Cloud Engineering) · F13 Technologies · September 2026 – Present  
+**Project sequence:** Project 1 of 3  
+**Collaboration:** Developed with a four-member intern team through defined work packages and shared integration.
+
+This was the first major team project I worked on during my F13 Technologies internship. My documented contributions focused on the identity service (WP1), workflow orchestration (WP2), authenticated API layer (WP5) and shared integration/release coordination. I worked alongside teammates responsible for document services, stage adapters, the employee portal and the HR dashboard.
+
+This is a collaborative team project, not a claim of sole authorship. The work-package table, contributor records and linked pull requests below distinguish my contributions from those of the wider team.
+
 [![Offline unit tests](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/amit-cloudops-ai/hrms-onboarding-service/actions/workflows/unit-tests.yml)
 [![AWS](https://img.shields.io/badge/Cloud-AWS-232F3E?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
 [![Python](https://img.shields.io/badge/Backend-Python%203.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
